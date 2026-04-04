@@ -1,12 +1,16 @@
 from fastapi import FastAPI
 
 from app.api.candidates import router as candidates_router
+from app.api.employers import router as employers_router
+from app.api.vacancies import router as vacancies_router
 from app.core.config import settings
 from app.core.db import check_db_connection
 
 app = FastAPI(title=settings.app_name)
 
 app.include_router(candidates_router)
+app.include_router(employers_router)
+app.include_router(vacancies_router)
 
 
 @app.get("/")
