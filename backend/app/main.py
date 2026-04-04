@@ -1,9 +1,12 @@
 from fastapi import FastAPI
 
+from app.api.candidates import router as candidates_router
 from app.core.config import settings
 from app.core.db import check_db_connection
 
 app = FastAPI(title=settings.app_name)
+
+app.include_router(candidates_router)
 
 
 @app.get("/")
