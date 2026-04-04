@@ -40,3 +40,15 @@ export type CandidateMatchItem = {
     full_name: string;
     suggested_vacancies: SuggestedVacancyItem[];
   };
+  export type VacancyDetail = {
+    id: number;
+    employer_id: number;
+    role: string;
+    venue_name: string;
+    city: string;
+    district?: string | null;
+    salary_text?: string | null;
+    schedule_text?: string | null;
+    needed_start?: string | null;
+    status: string;
+  };

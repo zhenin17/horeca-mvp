@@ -1,7 +1,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://195.133.30.228/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

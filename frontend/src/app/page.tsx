@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import type { CandidateDashboard, CandidateSuggestions } from "@/lib/types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-
 type ApplyResponse = {
   status: string;
   match_id: number;
@@ -44,13 +42,11 @@ export default function HomePage() {
   }, []);
 
   async function handleApply(vacancyId: number) {
-    if (!API_BASE_URL) return;
-
     setApplyingId(vacancyId);
     setMessage("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/vacancies/${vacancyId}/apply`, {
+      const response = await fetch(`/api/vacancies/${vacancyId}/apply`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -85,131 +81,67 @@ export default function HomePage() {
 
   if (loading || !dashboard || !suggestions) {
     return (
-      <main className="min-h-screen bg-white text-slate-900">
-        <div className="mx-auto max-w-3xl px-4 py-6">Загрузка...</div>
+      <main className="px-4 py-6">
+        <div>Загрузка...</div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-white text-slate-900">
-      <div className="mx-auto max-w-3xl px-4 py-6 space-y-6">
-        {message ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-            {message}
-          </div>
-        ) : null}
+    <main className="px-4 py-6 space-y-6">
+      {message ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+          {message}
+        </div>
+      ) : null}
 
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Профиль кандидата</p>
-          <h1 className="mt-1 text-2xl font-semibold">{dashboard.full_name}</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            {dashboard.primary_role} · {dashboard.city}
-            {dashboard.district ? `, ${dashboard.district}` : ""}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            Готовность выйти: {dashboard.ready_to_start}
-          </p>
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <p className="text-sm text-slate-500">Кандидат</p>
+        <h1 className="mt-1 text-2xl font-semibold">{dashboard.full_name}</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          {dashboard.primary_role} · {dashboard.city}
+          {dashboard.district ? `, ${dashboard.district}` : ""}
+        </p>
+        <p className="mt-1 text-sm text-slate-600">
+          Готовность выйти: {dashboard.ready_to_start}
+        </p>
+      </section>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">Всего откликов</div>
-              <div className="mt-1 text-xl font-semibold">
-                {dashboard.total_matches}
-              </div>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">Активные</div>
-              <div className="mt-1 text-xl font-semibold">
-                {dashboard.active_matches}
-              </div>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">Нанят</div>
-              <div className="mt-1 text-xl font-semibold">
-                {dashboard.hired_matches}
-              </div>
-            </div>
-            <div className="rounded-xl bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">Отклонен</div>
-              <div className="mt-1 text-xl font-semibold">
-                {dashboard.rejected_matches}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="text-xl font-semibold">Подходящие вакансии</h2>
-          <div className="mt-4 space-y-3">
-            {suggestions.suggested_vacancies.map((vacancy) => (
-              <div
-                key={vacancy.vacancy_id}
-                className="rounded-xl border border-slate-200 p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium">{vacancy.role}</div>
-                    <div className="text-sm text-slate-600">
-                      {vacancy.venue_name}
-                    </div>
-                    <div className="text-sm text-slate-500">
-                      {vacancy.city}
-                      {vacancy.district ? `, ${vacancy.district}` : ""}
-                    </div>
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h2 className="text-xl font-semibold">Подходящие вакансии</h2>
+        <div className="mt-4 space-y-3">
+          {suggestions.suggested_vacancies.map((vacancy) => (
+            <div
+              key={vacancy.vacancy_id}
+              className="rounded-xl border border-slate-200 p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-medium">{vacancy.role}</div>
+                  <div className="text-sm text-slate-600">
+                    {vacancy.venue_name}
                   </div>
-                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                    score {vacancy.score}
+                  <div className="text-sm text-slate-500">
+                    {vacancy.city}
+                    {vacancy.district ? `, ${vacancy.district}` : ""}
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleApply(vacancy.vacancy_id)}
-                  disabled={applyingId === vacancy.vacancy_id}
-                  className="mt-4 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {applyingId === vacancy.vacancy_id ? "Отправка..." : "Откликнуться"}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="text-xl font-semibold">Мои отклики</h2>
-          <div className="mt-4 space-y-3">
-            {dashboard.items.map((item) => (
-              <div
-                key={item.match_id}
-                className="rounded-xl border border-slate-200 p-4"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-medium">
-                      {item.role} · {item.venue_name}
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {item.city}
-                      {item.district ? `, ${item.district}` : ""}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      Статус: {item.status}
-                    </div>
-                    {item.comment ? (
-                      <div className="mt-1 text-sm text-slate-500">
-                        Комментарий: {item.comment}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                    {item.match_score ?? "-"}
-                  </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                  score {vacancy.score}
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      </div>
+
+              <button
+                onClick={() => handleApply(vacancy.vacancy_id)}
+                disabled={applyingId === vacancy.vacancy_id}
+                className="mt-4 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              >
+                {applyingId === vacancy.vacancy_id ? "Отправка..." : "Откликнуться"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }

@@ -36,6 +36,12 @@ def create_vacancy(payload: VacancyCreate, db: Session = Depends(get_db)):
 def list_vacancies(db: Session = Depends(get_db)):
     return db.query(Vacancy).order_by(Vacancy.id.desc()).all()
 
+@router.get("/{vacancy_id}", response_model=VacancyRead)
+def get_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
+    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+    return vacancy
 
 @router.post("/{vacancy_id}/apply")
 def apply_to_vacancy(vacancy_id: int, payload: CandidateApplyCreate, db: Session = Depends(get_db)):
