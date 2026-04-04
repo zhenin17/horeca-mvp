@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { formatReadyToStart, formatSalary } from "@/lib/format";
 import type { CandidateDashboard } from "@/lib/types";
 
 export default function ProfilePage() {
@@ -26,7 +27,7 @@ export default function ProfilePage() {
           <div>Роль: {dashboard.primary_role}</div>
           <div>Город: {dashboard.city}</div>
           <div>Район: {dashboard.district || "-"}</div>
-          <div>Готовность выйти: {dashboard.ready_to_start}</div>
+          <div>Готовность выйти: {formatReadyToStart(dashboard.ready_to_start)}</div>
           <div>Всего откликов: {dashboard.total_matches}</div>
           <div>Активные: {dashboard.active_matches}</div>
           <div>Нанят: {dashboard.hired_matches}</div>

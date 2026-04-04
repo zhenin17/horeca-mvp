@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { formatReadyToStart, formatSalary } from "@/lib/format";
+import { statusLabel } from "@/lib/status";
 import type { VacancyDetail } from "@/lib/types";
 
 type ApplyResponse = {
@@ -65,22 +67,22 @@ export default function VacancyDetailPage({
         body: JSON.stringify({
           candidate_id: 1,
           vacancy_id: vacancy.id,
-          comment: "apply from vacancy details page",
+          comment: "Отклик со страницы вакансии",
         }),
       });
 
       const data = (await response.json()) as ApplyResponse | { detail: string };
 
-if (!response.ok) {
-  const errorMessage =
-    "detail" in data ? data.detail : "Ошибка при отклике";
-  throw new Error(errorMessage);
-}
+      if (!response.ok) {
+        const errorMessage =
+          "detail" in data ? data.detail : "Ошибка при отклике";
+        throw new Error(errorMessage);
+      }
 
-const successData = data as ApplyResponse;
-setMessage(
-  `Отклик отправлен. Match #${successData.match_id}, score ${successData.match_score}`
-);
+      const successData = data as ApplyResponse;
+      setMessage(
+        `Отклик отправлен. №${successData.match_id}, score ${successData.match_score}`
+      );
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);
@@ -122,10 +124,10 @@ setMessage(
             Локация: {vacancy.city}
             {vacancy.district ? `, ${vacancy.district}` : ""}
           </div>
-          <div>Статус вакансии: {vacancy.status}</div>
-          <div>Ставка / доход: {vacancy.salary_text || "-"}</div>
+          <div>Статус вакансии: {statusLabel(vacancy.status)}</div>
+          <div>Ставка / доход: {formatSalary(vacancy.salary_text)}</div>
           <div>График: {vacancy.schedule_text || "-"}</div>
-          <div>Когда нужен выход: {vacancy.needed_start || "-"}</div>
+          <div>Когда нужен выход: {formatReadyToStart(vacancy.needed_start)}</div>
         </div>
 
         <button

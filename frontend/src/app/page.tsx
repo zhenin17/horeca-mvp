@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { formatReadyToStart } from "@/lib/format";
 import type { CandidateDashboard, CandidateSuggestions } from "@/lib/types";
 
 type ApplyResponse = {
@@ -55,7 +56,7 @@ export default function HomePage() {
         body: JSON.stringify({
           candidate_id: 1,
           vacancy_id: vacancyId,
-          comment: "apply from mini app ui",
+          comment: "Отклик из интерфейса кандидата",
         }),
       });
 
@@ -66,10 +67,10 @@ export default function HomePage() {
           "detail" in data ? data.detail : "Ошибка при отклике на вакансию";
         throw new Error(errorMessage);
       }
-      
+
       const successData = data as ApplyResponse;
       setMessage(
-        `Отклик отправлен. Match #${successData.match_id}, score ${successData.match_score}`
+        `Отклик отправлен. №${successData.match_id}, score ${successData.match_score}`
       );
       await loadData();
     } catch (error) {
@@ -107,53 +108,60 @@ export default function HomePage() {
           {dashboard.district ? `, ${dashboard.district}` : ""}
         </p>
         <p className="mt-1 text-sm text-slate-600">
-          Готовность выйти: {dashboard.ready_to_start}
+          Готовность выйти: {formatReadyToStart(dashboard.ready_to_start)}
         </p>
       </section>
 
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="text-xl font-semibold">Подходящие вакансии</h2>
-        <div className="mt-4 space-y-3">
-          {suggestions.suggested_vacancies.map((vacancy) => (
-            <div
-              key={vacancy.vacancy_id}
-              className="rounded-xl border border-slate-200 p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="font-medium">{vacancy.role}</div>
-                  <div className="text-sm text-slate-600">
-                    {vacancy.venue_name}
+
+        {suggestions.suggested_vacancies.length === 0 ? (
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            Пока нет подходящих вакансий.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            {suggestions.suggested_vacancies.map((vacancy) => (
+              <div
+                key={vacancy.vacancy_id}
+                className="rounded-xl border border-slate-200 p-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{vacancy.role}</div>
+                    <div className="text-sm text-slate-600">
+                      {vacancy.venue_name}
+                    </div>
+                    <div className="text-sm text-slate-500">
+                      {vacancy.city}
+                      {vacancy.district ? `, ${vacancy.district}` : ""}
+                    </div>
                   </div>
-                  <div className="text-sm text-slate-500">
-                    {vacancy.city}
-                    {vacancy.district ? `, ${vacancy.district}` : ""}
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                    score {vacancy.score}
                   </div>
                 </div>
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                  score {vacancy.score}
+
+                <div className="mt-4 flex items-center gap-4">
+                  <Link
+                    href={`/vacancies/${vacancy.vacancy_id}`}
+                    className="text-sm font-medium text-slate-700 underline"
+                  >
+                    Подробнее
+                  </Link>
+
+                  <button
+                    onClick={() => handleApply(vacancy.vacancy_id)}
+                    disabled={applyingId === vacancy.vacancy_id}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {applyingId === vacancy.vacancy_id ? "Отправка..." : "Откликнуться"}
+                  </button>
                 </div>
               </div>
-
-              <div className="mt-4 flex items-center gap-4">
-                <Link
-                  href={`/vacancies/${vacancy.vacancy_id}`}
-                  className="text-sm font-medium text-slate-700 underline"
-                >
-                  Подробнее
-                </Link>
-
-                <button
-                  onClick={() => handleApply(vacancy.vacancy_id)}
-                  disabled={applyingId === vacancy.vacancy_id}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {applyingId === vacancy.vacancy_id ? "Отправка..." : "Откликнуться"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

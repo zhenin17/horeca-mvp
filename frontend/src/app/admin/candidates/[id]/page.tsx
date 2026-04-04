@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { formatReadyToStart, formatSalary } from "@/lib/format";
+import { statusLabel } from "@/lib/status";
 
 type CandidateDashboardItem = {
   match_id: number;
@@ -43,22 +45,6 @@ type CandidateProfile = {
   expected_income?: string | null;
   is_active: boolean;
 };
-
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    shortlist: "в shortlist",
-    sent: "отправлен",
-    viewed: "просмотрен",
-    invited: "приглашен",
-    interviewed: "собеседование",
-    offered: "оффер",
-    hired: "нанят",
-    rejected: "отклонен",
-    no_show: "не дошел",
-  };
-
-  return map[status] || status;
-}
 
 export default function AdminCandidateDetailPage({
   params,
@@ -165,9 +151,9 @@ export default function AdminCandidateDetailPage({
             {candidate.district ? `, ${candidate.district}` : ""}
           </div>
           <div>Опыт: {candidate.horeca_experience_months} мес.</div>
-          <div>Готовность выйти: {candidate.ready_to_start}</div>
-          <div>Желаемый доход: {candidate.expected_income || "-"}</div>
-          <div>Статус профиля: {candidate.is_active ? "активен" : "неактивен"}</div>
+          <div>Готовность выйти: {formatReadyToStart(candidate.ready_to_start)}</div>
+          <div>Желаемый доход: {formatSalary(candidate.expected_income)}</div>
+          <div>Статус профиля: {candidate.is_active ? "Активен" : "Неактивен"}</div>
         </div>
       </section>
 
@@ -205,83 +191,89 @@ export default function AdminCandidateDetailPage({
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="text-xl font-semibold">Отклики и статусы</h2>
 
-        <div className="mt-4 space-y-4">
-          {dashboard.items.map((item) => (
-            <div
-              key={item.match_id}
-              className="rounded-xl border border-slate-200 p-4 space-y-4"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="font-medium">
-                    {item.role} · {item.venue_name}
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    {item.city}
-                    {item.district ? `, ${item.district}` : ""}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Статус: {statusLabel(item.status)}
-                  </div>
-                  {item.comment ? (
-                    <div className="mt-1 text-sm text-slate-500">
-                      Комментарий: {item.comment}
+        {dashboard.items.length === 0 ? (
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            У кандидата пока нет откликов.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {dashboard.items.map((item) => (
+              <div
+                key={item.match_id}
+                className="rounded-xl border border-slate-200 p-4 space-y-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="font-medium">
+                      {item.role} · {item.venue_name}
                     </div>
-                  ) : null}
+                    <div className="text-sm text-slate-600">
+                      {item.city}
+                      {item.district ? `, ${item.district}` : ""}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      Статус отклика: {statusLabel(item.status)}
+                    </div>
+                    {item.comment ? (
+                      <div className="mt-1 text-sm text-slate-500">
+                        Комментарий: {item.comment}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                    score {item.match_score ?? "-"}
+                  </div>
                 </div>
 
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                  score {item.match_score ?? "-"}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "send", "Кандидат отправлен работодателю")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Отправить
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "view", "Работодатель просмотрел кандидата")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Просмотрен
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "invite", "Кандидат приглашен")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Пригласить
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "interview", "Собеседование отмечено")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Собеседование
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "hire", "Кандидат отмечен как нанятый")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Нанять
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "reject", "Кандидат отклонен")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Отклонить
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(item.match_id, "no-show", "Отмечен невыход")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Не дошел
+                  </button>
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => runMatchAction(item.match_id, "send", "Кандидат отправлен работодателю")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Отправить
-                </button>
-                <button
-                  onClick={() => runMatchAction(item.match_id, "view", "Работодатель просмотрел кандидата")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Просмотрен
-                </button>
-                <button
-                  onClick={() => runMatchAction(item.match_id, "invite", "Кандидат приглашен")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Пригласить
-                </button>
-                <button
-                  onClick={() => runMatchAction(item.match_id, "interview", "Собеседование отмечено")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Собеседование
-                </button>
-                <button
-                  onClick={() => runMatchAction(item.match_id, "hire", "Кандидат отмечен как нанятый")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Нанять
-                </button>
-                <button
-                  onClick={() => runMatchAction(item.match_id, "reject", "Кандидат отклонен")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Отклонить
-                </button>
-                <button
-                  onClick={() => runMatchAction(item.match_id, "no-show", "Отмечен невыход")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Не дошел
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

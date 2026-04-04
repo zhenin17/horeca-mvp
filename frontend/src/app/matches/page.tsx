@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import type { CandidateDashboard } from "@/lib/types";
 import { statusLabel } from "@/lib/status";
+import type { CandidateDashboard } from "@/lib/types";
 
 export default function MatchesPage() {
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);

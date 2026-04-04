@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { formatReadyToStart, formatSalary } from "@/lib/format";
+import { statusLabel } from "@/lib/status";
 
 type CandidateItem = {
   id: number;
@@ -46,22 +48,6 @@ type VacancyFunnel = {
   by_status: Record<string, number>;
 };
 
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    shortlist: "в shortlist",
-    sent: "отправлен",
-    viewed: "просмотрен",
-    invited: "приглашен",
-    interviewed: "собеседование",
-    offered: "оффер",
-    hired: "нанят",
-    rejected: "отклонен",
-    no_show: "не дошел",
-  };
-
-  return map[status] || status;
-}
-
 export default function AdminVacancyDetailPage({
   params,
 }: {
@@ -87,7 +73,7 @@ export default function AdminVacancyDetailPage({
       }
 
       if (!funnelResponse.ok) {
-        throw new Error("Не удалось загрузить funnel");
+        throw new Error("Не удалось загрузить воронку");
       }
 
       const shortlistData = (await shortlistResponse.json()) as VacancyShortlist;
@@ -163,8 +149,8 @@ export default function AdminVacancyDetailPage({
             Локация: {shortlist.city}
             {shortlist.district ? `, ${shortlist.district}` : ""}
           </div>
-          <div>Статус вакансии: {shortlist.status}</div>
-          <div>Всего match: {funnel.total_matches}</div>
+          <div>Статус вакансии: {statusLabel(shortlist.status)}</div>
+          <div>Всего откликов: {funnel.total_matches}</div>
         </div>
       </section>
 
@@ -183,87 +169,93 @@ export default function AdminVacancyDetailPage({
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="text-xl font-semibold">Shortlist</h2>
 
-        <div className="mt-4 space-y-4">
-          {shortlist.matches.map((match) => (
-            <div
-              key={match.id}
-              className="rounded-xl border border-slate-200 p-4 space-y-4"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="font-medium">{match.candidate.full_name}</div>
-                  <div className="text-sm text-slate-600">
-                    {match.candidate.primary_role} · {match.candidate.city}
-                    {match.candidate.district ? `, ${match.candidate.district}` : ""}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Опыт: {match.candidate.horeca_experience_months} мес.
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Готовность: {match.candidate.ready_to_start}
-                  </div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    Статус match: {statusLabel(match.status)}
-                  </div>
-                  {match.comment ? (
-                    <div className="mt-1 text-sm text-slate-500">
-                      Комментарий: {match.comment}
+        {shortlist.matches.length === 0 ? (
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            Пока в shortlist нет кандидатов.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {shortlist.matches.map((match) => (
+              <div
+                key={match.id}
+                className="rounded-xl border border-slate-200 p-4 space-y-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="font-medium">{match.candidate.full_name}</div>
+                    <div className="text-sm text-slate-600">
+                      {match.candidate.primary_role} · {match.candidate.city}
+                      {match.candidate.district ? `, ${match.candidate.district}` : ""}
                     </div>
-                  ) : null}
+                    <div className="mt-1 text-sm text-slate-500">
+                      Опыт: {match.candidate.horeca_experience_months} мес.
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      Готовность: {formatReadyToStart(match.candidate.ready_to_start)}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      Статус отклика: {statusLabel(match.status)}
+                    </div>
+                    {match.comment ? (
+                      <div className="mt-1 text-sm text-slate-500">
+                        Комментарий: {match.comment}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                    score {match.match_score ?? "-"}
+                  </div>
                 </div>
 
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                  score {match.match_score ?? "-"}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => runMatchAction(match.id, "send", "Кандидат отправлен работодателю")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Отправить
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(match.id, "view", "Работодатель просмотрел кандидата")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Просмотрен
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(match.id, "invite", "Кандидат приглашен")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Пригласить
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(match.id, "interview", "Собеседование отмечено")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Собеседование
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(match.id, "hire", "Кандидат отмечен как нанятый")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Нанять
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(match.id, "reject", "Кандидат отклонен")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Отклонить
+                  </button>
+                  <button
+                    onClick={() => runMatchAction(match.id, "no-show", "Отмечен невыход")}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                  >
+                    Не дошел
+                  </button>
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => runMatchAction(match.id, "send", "Кандидат отправлен работодателю")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Отправить
-                </button>
-                <button
-                  onClick={() => runMatchAction(match.id, "view", "Работодатель просмотрел кандидата")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Просмотрен
-                </button>
-                <button
-                  onClick={() => runMatchAction(match.id, "invite", "Кандидат приглашен")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Пригласить
-                </button>
-                <button
-                  onClick={() => runMatchAction(match.id, "interview", "Собеседование отмечено")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Собеседование
-                </button>
-                <button
-                  onClick={() => runMatchAction(match.id, "hire", "Кандидат отмечен как нанятый")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Нанять
-                </button>
-                <button
-                  onClick={() => runMatchAction(match.id, "reject", "Кандидат отклонен")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Отклонить
-                </button>
-                <button
-                  onClick={() => runMatchAction(match.id, "no-show", "Отмечен невыход")}
-                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                >
-                  Не дошел
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );

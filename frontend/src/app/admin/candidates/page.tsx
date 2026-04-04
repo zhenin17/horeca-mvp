@@ -28,7 +28,7 @@ export default function AdminCandidatesPage() {
     async function loadCandidates() {
       try {
         setErrorText("");
-        const data = await apiFetch<CandidateItem[]>("/candidates");
+        const data = await apiFetch<CandidateItem[]>("/candidates/");
         setCandidates(data);
       } catch (error) {
         console.error(error);
