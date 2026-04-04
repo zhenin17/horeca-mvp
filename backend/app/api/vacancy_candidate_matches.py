@@ -13,6 +13,9 @@ from app.schemas.vacancy_candidate_match import (
     VacancyCandidateMatchWithCandidateRead,
 )
 from app.services.match_workflow import change_match_status
+from app.models.candidate import Candidate
+from app.models.vacancy import Vacancy
+from app.services.scoring import calculate_final_match_score
 
 ALLOWED_MATCH_STATUSES = {
     "shortlist",
@@ -41,11 +44,23 @@ def create_match(payload: VacancyCandidateMatchCreate, db: Session = Depends(get
     if payload.status not in ALLOWED_MATCH_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid match status")
 
+    candidate = db.query(Candidate).filter(Candidate.id == payload.candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    vacancy = db.query(Vacancy).filter(Vacancy.id == payload.vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    match_score = payload.match_score
+    if match_score is None:
+        match_score = calculate_final_match_score(candidate, vacancy)
+
     match = VacancyCandidateMatch(
         candidate_id=payload.candidate_id,
         employer_id=payload.employer_id,
         vacancy_id=payload.vacancy_id,
-        match_score=payload.match_score,
+        match_score=match_score,
         status=payload.status,
         comment=payload.comment,
     )
@@ -59,7 +74,7 @@ def create_match(payload: VacancyCandidateMatchCreate, db: Session = Depends(get
         vacancy_id=payload.vacancy_id,
         event_type="match_created",
         event_source="api",
-        comment=f"match_id={match.id}",
+        comment=f"match_id={match.id}; score={match.match_score}",
     )
     db.add(event)
     db.commit()
