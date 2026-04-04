@@ -15,3 +15,11 @@ class VacancyShortlistRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class VacancyFunnelRead(BaseModel):
+    vacancy_id: int
+    role: str
+    venue_name: str
+    total_matches: int
+    by_status: dict[str, int]
