@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { formatSalary } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
 
@@ -27,20 +28,10 @@ export default function AdminVacanciesPage() {
     async function loadVacancies() {
       try {
         setErrorText("");
-
-        const response = await fetch("/api/vacancies", {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error(`Не удалось загрузить вакансии (${response.status})`);
-        }
-
-        const data = (await response.json()) as VacancyItem[];
+        const data = await apiFetch<VacancyItem[]>("/vacancies");
         setVacancies(data);
       } catch (error) {
         console.error(error);
-
         if (error instanceof Error) {
           setErrorText(error.message);
         } else {

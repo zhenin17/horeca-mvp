@@ -1,5 +1,9 @@
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://195.133.30.228";
+
 export async function apiFetch<T>(path: string): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const response = await fetch(`${API_BASE_URL}/api${normalizedPath}`, {
     cache: "no-store",
   });
 

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import { formatReadyToStart } from "@/lib/format";
 
 type CandidateItem = {
@@ -27,20 +28,10 @@ export default function AdminCandidatesPage() {
     async function loadCandidates() {
       try {
         setErrorText("");
-
-        const response = await fetch("/api/candidates", {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error(`Не удалось загрузить кандидатов (${response.status})`);
-        }
-
-        const data = (await response.json()) as CandidateItem[];
+        const data = await apiFetch<CandidateItem[]>("/candidates");
         setCandidates(data);
       } catch (error) {
         console.error(error);
-
         if (error instanceof Error) {
           setErrorText(error.message);
         } else {
