@@ -7,6 +7,8 @@ from app.core.db import get_db
 from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.schemas.shortlist import VacancyFunnelRead, VacancyShortlistRead
+from app.models.candidate import Candidate
+from app.services.scoring import calculate_final_match_score
 
 ACTIVE_MATCH_STATUSES = {"shortlist", "sent", "viewed", "invited", "interviewed", "offered"}
 
@@ -114,3 +116,34 @@ def get_employer_shortlists(employer_id: int, db: Session = Depends(get_db)):
         )
 
     return result
+   
+@router.get("/vacancy/{vacancy_id}/suggestions")
+def get_vacancy_suggestions(vacancy_id: int, limit: int = 10, db: Session = Depends(get_db)):
+    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    candidates = db.query(Candidate).filter(Candidate.is_active == True).all()
+
+    scored = []
+    for candidate in candidates:
+        score = calculate_final_match_score(candidate, vacancy)
+        scored.append(
+            {
+                "candidate_id": candidate.id,
+                "full_name": candidate.full_name,
+                "primary_role": candidate.primary_role,
+                "city": candidate.city,
+                "district": candidate.district,
+                "ready_to_start": candidate.ready_to_start,
+                "score": score,
+            }
+        )
+
+    scored.sort(key=lambda item: item["score"], reverse=True)
+    return {
+        "vacancy_id": vacancy.id,
+        "role": vacancy.role,
+        "venue_name": vacancy.venue_name,
+        "suggestions": scored[:limit],
+    }
