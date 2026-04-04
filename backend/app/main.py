@@ -4,6 +4,7 @@ from app.api.candidates import router as candidates_router
 from app.api.employers import router as employers_router
 from app.api.funnel_events import router as funnel_events_router
 from app.api.vacancies import router as vacancies_router
+from app.api.vacancy_candidate_matches import router as matches_router
 from app.core.config import settings
 from app.core.db import check_db_connection
 
@@ -13,6 +14,7 @@ app.include_router(candidates_router)
 app.include_router(employers_router)
 app.include_router(vacancies_router)
 app.include_router(funnel_events_router)
+app.include_router(matches_router)
 
 
 @app.get("/")
