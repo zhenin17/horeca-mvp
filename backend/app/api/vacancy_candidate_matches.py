@@ -12,6 +12,7 @@ from app.schemas.vacancy_candidate_match import (
     VacancyCandidateMatchUpdate,
     VacancyCandidateMatchWithCandidateRead,
 )
+from app.services.match_workflow import change_match_status
 
 ALLOWED_MATCH_STATUSES = {
     "shortlist",
@@ -26,6 +27,13 @@ ALLOWED_MATCH_STATUSES = {
 }
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
+
+
+def get_match_or_404(db: Session, match_id: int) -> VacancyCandidateMatch:
+    match = db.query(VacancyCandidateMatch).filter(VacancyCandidateMatch.id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return match
 
 
 @router.post("/", response_model=VacancyCandidateMatchRead)
@@ -88,37 +96,61 @@ def list_matches(
 
 @router.patch("/{match_id}", response_model=VacancyCandidateMatchRead)
 def update_match(match_id: int, payload: VacancyCandidateMatchUpdate, db: Session = Depends(get_db)):
-    match = db.query(VacancyCandidateMatch).filter(VacancyCandidateMatch.id == match_id).first()
-
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
-
-    old_status = match.status
+    match = get_match_or_404(db, match_id)
 
     if payload.status is not None:
         if payload.status not in ALLOWED_MATCH_STATUSES:
             raise HTTPException(status_code=400, detail="Invalid match status")
-        match.status = payload.status
+        match = change_match_status(db, match, payload.status, comment=payload.comment)
 
     if payload.match_score is not None:
         match.match_score = payload.match_score
 
-    if payload.comment is not None:
+    if payload.comment is not None and payload.status is None:
         match.comment = payload.comment
 
     db.commit()
     db.refresh(match)
-
-    if payload.status is not None and payload.status != old_status:
-        event = FunnelEvent(
-            candidate_id=match.candidate_id,
-            employer_id=match.employer_id,
-            vacancy_id=match.vacancy_id,
-            event_type="match_status_changed",
-            event_source="api",
-            comment=f"match_id={match.id}; {old_status} -> {match.status}",
-        )
-        db.add(event)
-        db.commit()
-
     return match
+
+
+@router.post("/{match_id}/send", response_model=VacancyCandidateMatchRead)
+def send_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "sent")
+
+
+@router.post("/{match_id}/view", response_model=VacancyCandidateMatchRead)
+def view_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "viewed")
+
+
+@router.post("/{match_id}/invite", response_model=VacancyCandidateMatchRead)
+def invite_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "invited")
+
+
+@router.post("/{match_id}/interview", response_model=VacancyCandidateMatchRead)
+def interview_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "interviewed")
+
+
+@router.post("/{match_id}/hire", response_model=VacancyCandidateMatchRead)
+def hire_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "hired")
+
+
+@router.post("/{match_id}/reject", response_model=VacancyCandidateMatchRead)
+def reject_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "rejected")
+
+
+@router.post("/{match_id}/no-show", response_model=VacancyCandidateMatchRead)
+def no_show_match(match_id: int, db: Session = Depends(get_db)):
+    match = get_match_or_404(db, match_id)
+    return change_match_status(db, match, "no_show")
