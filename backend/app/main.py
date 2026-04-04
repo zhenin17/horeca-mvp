@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
-from app.config import settings
-from app.db import check_db_connection
+from app.core.config import settings
+from app.core.db import check_db_connection
 
 app = FastAPI(title=settings.app_name)
 
