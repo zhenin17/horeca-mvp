@@ -28,7 +28,7 @@ export default function AdminVacanciesPage() {
     async function loadVacancies() {
       try {
         setErrorText("");
-        const data = await apiFetch<VacancyItem[]>("/vacancies");
+        const data = await apiFetch<VacancyItem[]>("/vacancies/");
         setVacancies(data);
       } catch (error) {
         console.error(error);
