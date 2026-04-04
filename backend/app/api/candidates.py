@@ -8,6 +8,8 @@ from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.schemas.candidate import CandidateCreate, CandidateRead
 from app.services.scoring import calculate_final_match_score
 from app.schemas.candidate_dashboard import CandidateDashboardRead
+from app.schemas.reliability import CandidateReliabilityRead
+from app.services.reliability import calculate_candidate_reliability
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
 
 
@@ -159,4 +161,21 @@ def get_candidate_dashboard(candidate_id: int, db: Session = Depends(get_db)):
         "hired_matches": hired_matches,
         "rejected_matches": rejected_matches,
         "items": items,
+    }@router.get("/{candidate_id}/reliability", response_model=CandidateReliabilityRead)
+def get_candidate_reliability(candidate_id: int, db: Session = Depends(get_db)):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    matches = (
+        db.query(VacancyCandidateMatch)
+        .filter(VacancyCandidateMatch.candidate_id == candidate_id)
+        .all()
+    )
+
+    summary = calculate_candidate_reliability(matches)
+
+    return {
+        "candidate_id": candidate.id,
+        **summary,
     }
