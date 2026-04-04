@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api.candidates import router as candidates_router
 from app.api.employers import router as employers_router
 from app.api.funnel_events import router as funnel_events_router
+from app.api.shortlists import router as shortlists_router
 from app.api.vacancies import router as vacancies_router
 from app.api.vacancy_candidate_matches import router as matches_router
 from app.core.config import settings
@@ -15,6 +16,7 @@ app.include_router(employers_router)
 app.include_router(vacancies_router)
 app.include_router(funnel_events_router)
 app.include_router(matches_router)
+app.include_router(shortlists_router)
 
 
 @app.get("/")
