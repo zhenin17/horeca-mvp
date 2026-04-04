@@ -11,6 +11,12 @@ class VacancyCandidateMatchCreate(BaseModel):
     comment: Optional[str] = None
 
 
+class VacancyCandidateMatchUpdate(BaseModel):
+    status: Optional[str] = None
+    match_score: Optional[int] = None
+    comment: Optional[str] = None
+
+
 class VacancyCandidateMatchRead(BaseModel):
     id: int
     candidate_id: int
