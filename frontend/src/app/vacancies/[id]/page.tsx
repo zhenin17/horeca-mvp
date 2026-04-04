@@ -71,13 +71,16 @@ export default function VacancyDetailPage({
 
       const data = (await response.json()) as ApplyResponse | { detail: string };
 
-      if (!response.ok) {
-        const errorMessage =
-          "detail" in data ? data.detail : "Ошибка при отклике";
-        throw new Error(errorMessage);
-      }
+if (!response.ok) {
+  const errorMessage =
+    "detail" in data ? data.detail : "Ошибка при отклике";
+  throw new Error(errorMessage);
+}
 
-      setMessage(`Отклик отправлен. Match #${data.match_id}, score ${data.match_score}`);
+const successData = data as ApplyResponse;
+setMessage(
+  `Отклик отправлен. Match #${successData.match_id}, score ${successData.match_score}`
+);
     } catch (error) {
       if (error instanceof Error) {
         setMessage(error.message);

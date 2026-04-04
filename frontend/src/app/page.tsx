@@ -66,8 +66,11 @@ export default function HomePage() {
           "detail" in data ? data.detail : "Ошибка при отклике на вакансию";
         throw new Error(errorMessage);
       }
-
-      setMessage(`Отклик отправлен. Match #${data.match_id}, score ${data.match_score}`);
+      
+      const successData = data as ApplyResponse;
+      setMessage(
+        `Отклик отправлен. Match #${successData.match_id}, score ${successData.match_score}`
+      );
       await loadData();
     } catch (error) {
       if (error instanceof Error) {
