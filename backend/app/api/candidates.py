@@ -25,3 +25,8 @@ def create_candidate(payload: CandidateCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(candidate)
     return candidate
+
+
+@router.get("/", response_model=list[CandidateRead])
+def list_candidates(db: Session = Depends(get_db)):
+    return db.query(Candidate).order_by(Candidate.id.desc()).all()

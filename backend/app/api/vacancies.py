@@ -25,3 +25,8 @@ def create_vacancy(payload: VacancyCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(vacancy)
     return vacancy
+
+
+@router.get("/", response_model=list[VacancyRead])
+def list_vacancies(db: Session = Depends(get_db)):
+    return db.query(Vacancy).order_by(Vacancy.id.desc()).all()

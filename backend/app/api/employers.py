@@ -21,3 +21,8 @@ def create_employer(payload: EmployerCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(employer)
     return employer
+
+
+@router.get("/", response_model=list[EmployerRead])
+def list_employers(db: Session = Depends(get_db)):
+    return db.query(Employer).order_by(Employer.id.desc()).all()

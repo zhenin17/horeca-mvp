@@ -22,3 +22,8 @@ def create_funnel_event(payload: FunnelEventCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(event)
     return event
+
+
+@router.get("/", response_model=list[FunnelEventRead])
+def list_funnel_events(db: Session = Depends(get_db)):
+    return db.query(FunnelEvent).order_by(FunnelEvent.id.desc()).all()
