@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import type { CandidateDashboard, CandidateSuggestions } from "@/lib/types";
@@ -131,13 +132,22 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleApply(vacancy.vacancy_id)}
-                disabled={applyingId === vacancy.vacancy_id}
-                className="mt-4 rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-              >
-                {applyingId === vacancy.vacancy_id ? "Отправка..." : "Откликнуться"}
-              </button>
+              <div className="mt-4 flex items-center gap-4">
+                <Link
+                  href={`/vacancies/${vacancy.vacancy_id}`}
+                  className="text-sm font-medium text-slate-700 underline"
+                >
+                  Подробнее
+                </Link>
+
+                <button
+                  onClick={() => handleApply(vacancy.vacancy_id)}
+                  disabled={applyingId === vacancy.vacancy_id}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {applyingId === vacancy.vacancy_id ? "Отправка..." : "Откликнуться"}
+                </button>
+              </div>
             </div>
           ))}
         </div>
