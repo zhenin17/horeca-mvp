@@ -46,6 +46,17 @@ type CandidateProfile = {
   is_active: boolean;
 };
 
+type CandidateReliability = {
+  candidate_id: number;
+  total_matches: number;
+  invited_count: number;
+  interviewed_count: number;
+  hired_count: number;
+  rejected_count: number;
+  no_show_count: number;
+  reliability_score: number;
+};
+
 export default function AdminCandidateDetailPage({
   params,
 }: {
@@ -55,15 +66,17 @@ export default function AdminCandidateDetailPage({
 
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);
+  const [reliability, setReliability] = useState<CandidateReliability | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
   async function loadData() {
     setLoading(true);
     try {
-      const [candidateResponse, dashboardResponse] = await Promise.all([
+      const [candidateResponse, dashboardResponse, reliabilityResponse] = await Promise.all([
         fetch(`/api/candidates/${id}`, { cache: "no-store" }),
         fetch(`/api/candidates/${id}/dashboard`, { cache: "no-store" }),
+        fetch(`/api/candidates/${id}/reliability`, { cache: "no-store" }),
       ]);
 
       if (!candidateResponse.ok) {
@@ -74,11 +87,17 @@ export default function AdminCandidateDetailPage({
         throw new Error("Не удалось загрузить дашборд кандидата");
       }
 
+      if (!reliabilityResponse.ok) {
+        throw new Error("Не удалось загрузить надежность кандидата");
+      }
+
       const candidateData = (await candidateResponse.json()) as CandidateProfile;
       const dashboardData = (await dashboardResponse.json()) as CandidateDashboard;
+      const reliabilityData = (await reliabilityResponse.json()) as CandidateReliability;
 
       setCandidate(candidateData);
       setDashboard(dashboardData);
+      setReliability(reliabilityData);
     } catch (error) {
       console.error(error);
       setMessage("Не удалось загрузить карточку кандидата");
@@ -120,7 +139,7 @@ export default function AdminCandidateDetailPage({
     return <main className="px-4 py-6">Загрузка...</main>;
   }
 
-  if (!candidate || !dashboard) {
+  if (!candidate || !dashboard || !reliability) {
     return <main className="px-4 py-6">Кандидат не найден</main>;
   }
 
@@ -158,32 +177,61 @@ export default function AdminCandidateDetailPage({
       </section>
 
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <h2 className="text-xl font-semibold">Надежность кандидата</h2>
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2">
+            <div className="text-xs text-slate-500">Индекс надежности</div>
+            <div className="mt-1 text-2xl font-semibold">
+              {reliability.reliability_score} / 100
+            </div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Приглашений</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.invited_count}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Собеседований</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.interviewed_count}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Наймов</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.hired_count}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Отказов</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.rejected_count}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Не дошел</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.no_show_count}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Всего откликов</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.total_matches}</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="text-xl font-semibold">Сводка по кандидату</h2>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Всего откликов</div>
-            <div className="mt-1 text-xl font-semibold">
-              {dashboard.total_matches}
-            </div>
+            <div className="mt-1 text-xl font-semibold">{dashboard.total_matches}</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Активные</div>
-            <div className="mt-1 text-xl font-semibold">
-              {dashboard.active_matches}
-            </div>
+            <div className="mt-1 text-xl font-semibold">{dashboard.active_matches}</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Нанят</div>
-            <div className="mt-1 text-xl font-semibold">
-              {dashboard.hired_matches}
-            </div>
+            <div className="mt-1 text-xl font-semibold">{dashboard.hired_matches}</div>
           </div>
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Отклонен</div>
-            <div className="mt-1 text-xl font-semibold">
-              {dashboard.rejected_matches}
-            </div>
+            <div className="mt-1 text-xl font-semibold">{dashboard.rejected_matches}</div>
           </div>
         </div>
       </section>
@@ -228,43 +276,57 @@ export default function AdminCandidateDetailPage({
 
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => runMatchAction(item.match_id, "send", "Кандидат отправлен работодателю")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "send", "Кандидат отправлен работодателю")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Отправить
                   </button>
                   <button
-                    onClick={() => runMatchAction(item.match_id, "view", "Работодатель просмотрел кандидата")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "view", "Работодатель просмотрел кандидата")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Просмотрен
                   </button>
                   <button
-                    onClick={() => runMatchAction(item.match_id, "invite", "Кандидат приглашен")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "invite", "Кандидат приглашен")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Пригласить
                   </button>
                   <button
-                    onClick={() => runMatchAction(item.match_id, "interview", "Собеседование отмечено")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "interview", "Собеседование отмечено")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Собеседование
                   </button>
                   <button
-                    onClick={() => runMatchAction(item.match_id, "hire", "Кандидат отмечен как нанятый")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "hire", "Кандидат отмечен как нанятый")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Нанять
                   </button>
                   <button
-                    onClick={() => runMatchAction(item.match_id, "reject", "Кандидат отклонен")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "reject", "Кандидат отклонен")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Отклонить
                   </button>
                   <button
-                    onClick={() => runMatchAction(item.match_id, "no-show", "Отмечен невыход")}
+                    onClick={() =>
+                      runMatchAction(item.match_id, "no-show", "Отмечен невыход")
+                    }
                     className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
                   >
                     Не дошел

@@ -20,7 +20,7 @@ export default function RootLayout({
           <TelegramShell />
 
           <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
-            <div className="px-4 py-3 space-y-2">
+            <div className="space-y-2 px-4 py-3">
               <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
                 Кандидат
               </div>
@@ -40,17 +40,14 @@ export default function RootLayout({
                 Админка
               </div>
               <nav className="flex flex-wrap items-center gap-4 text-sm">
-                <Link
-                  href="/admin/vacancies"
-                  className="font-medium hover:text-slate-600"
-                >
+                <Link href="/admin/vacancies" className="font-medium hover:text-slate-600">
                   Вакансии
                 </Link>
-                <Link
-                  href="/admin/candidates"
-                  className="font-medium hover:text-slate-600"
-                >
+                <Link href="/admin/candidates" className="font-medium hover:text-slate-600">
                   Кандидаты
+                </Link>
+                <Link href="/admin/events" className="font-medium hover:text-slate-600">
+                  События
                 </Link>
               </nav>
             </div>

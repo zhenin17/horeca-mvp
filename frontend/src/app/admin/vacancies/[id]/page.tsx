@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { formatReadyToStart, formatSalary } from "@/lib/format";
+import { formatReadyToStart } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
 
 type CandidateItem = {
@@ -17,6 +17,17 @@ type CandidateItem = {
   ready_to_start: string;
   expected_income?: string | null;
   is_active: boolean;
+};
+
+type CandidateReliability = {
+  candidate_id: number;
+  total_matches: int;
+  invited_count: int;
+  interviewed_count: int;
+  hired_count: int;
+  rejected_count: int;
+  no_show_count: int;
+  reliability_score: int;
 };
 
 type MatchItem = {
@@ -57,6 +68,7 @@ export default function AdminVacancyDetailPage({
 
   const [shortlist, setShortlist] = useState<VacancyShortlist | null>(null);
   const [funnel, setFunnel] = useState<VacancyFunnel | null>(null);
+  const [reliabilityMap, setReliabilityMap] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
 
@@ -81,6 +93,25 @@ export default function AdminVacancyDetailPage({
 
       setShortlist(shortlistData);
       setFunnel(funnelData);
+
+      const reliabilityEntries = await Promise.all(
+        shortlistData.matches.map(async (match) => {
+          try {
+            const response = await fetch(`/api/candidates/${match.candidate_id}/reliability`, {
+              cache: "no-store",
+            });
+            if (!response.ok) {
+              return [match.candidate_id, 0] as const;
+            }
+            const data = (await response.json()) as CandidateReliability;
+            return [match.candidate_id, data.reliability_score] as const;
+          } catch {
+            return [match.candidate_id, 0] as const;
+          }
+        })
+      );
+
+      setReliabilityMap(Object.fromEntries(reliabilityEntries));
     } catch (error) {
       console.error(error);
       setMessage("Не удалось загрузить страницу вакансии");
@@ -196,6 +227,9 @@ export default function AdminVacancyDetailPage({
                     <div className="mt-1 text-sm text-slate-500">
                       Статус отклика: {statusLabel(match.status)}
                     </div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      Надежность: {reliabilityMap[match.candidate_id] ?? 0} / 100
+                    </div>
                     {match.comment ? (
                       <div className="mt-1 text-sm text-slate-500">
                         Комментарий: {match.comment}
@@ -203,8 +237,13 @@ export default function AdminVacancyDetailPage({
                     ) : null}
                   </div>
 
-                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                    score {match.match_score ?? "-"}
+                  <div className="space-y-2 text-right">
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                      score {match.match_score ?? "-"}
+                    </div>
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                      reliability {reliabilityMap[match.candidate_id] ?? 0}
+                    </div>
                   </div>
                 </div>
 
