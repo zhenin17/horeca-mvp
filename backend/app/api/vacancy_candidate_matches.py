@@ -8,13 +8,26 @@ from app.schemas.vacancy_candidate_match import (
     VacancyCandidateMatchCreate,
     VacancyCandidateMatchRead,
     VacancyCandidateMatchUpdate,
-)
-from app.schemas.vacancy_candidate_match_with_candidate import (
     VacancyCandidateMatchWithCandidateRead,
 )
-from app.services.match_status import can_transition_to
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
+
+
+def can_transition_to(current_status: str, new_status: str) -> bool:
+    allowed_transitions = {
+        "shortlist": {"sent", "viewed", "invited", "rejected"},
+        "sent": {"viewed", "invited", "rejected"},
+        "viewed": {"invited", "rejected"},
+        "invited": {"interviewed", "rejected", "no_show"},
+        "interviewed": {"hired", "rejected", "no_show"},
+        "offered": {"hired", "rejected"},
+        "hired": set(),
+        "rejected": set(),
+        "no_show": set(),
+    }
+
+    return new_status in allowed_transitions.get(current_status, set())
 
 
 def create_status_event(

@@ -22,16 +22,27 @@ export default function EmployerStartPage() {
       try {
         setErrorText("");
 
-        const response = await fetch("/api/employers/", {
+        const response = await fetch("/api/employers", {
           cache: "no-store",
         });
+
+        const contentType = response.headers.get("content-type") || "";
+        const text = await response.text();
 
         if (!response.ok) {
           throw new Error(`Не удалось загрузить работодателей (${response.status})`);
         }
 
-        const text = await response.text();
-        const data = text ? (JSON.parse(text) as EmployerItem[]) : [];
+        if (!text.trim()) {
+          setEmployers([]);
+          return;
+        }
+
+        if (!contentType.includes("application/json")) {
+          throw new Error("Сервер вернул не JSON, а другой формат ответа");
+        }
+
+        const data = JSON.parse(text) as EmployerItem[];
 
         setEmployers(Array.isArray(data) ? data : []);
       } catch (error) {

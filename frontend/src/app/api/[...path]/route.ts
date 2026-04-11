@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://195.133.30.228";
+  process.env.API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "http://127.0.0.1:8000";
 
 function buildTargetUrl(
   pathParts: string[],
@@ -12,9 +14,8 @@ function buildTargetUrl(
   const hasTrailingSlash =
     forceTrailingSlash || request.nextUrl.pathname.endsWith("/");
 
-  const url = new URL(
-    `${API_BASE_URL}/api/${path}${hasTrailingSlash ? "/" : ""}`
-  );
+  const base = API_BASE_URL.replace(/\/$/, "");
+  const url = new URL(`${base}/${path}${hasTrailingSlash ? "/" : ""}`);
 
   request.nextUrl.searchParams.forEach((value, key) => {
     url.searchParams.set(key, value);
@@ -33,7 +34,7 @@ async function fetchUpstream(
   const init: RequestInit = {
     method: request.method,
     headers,
-    redirect: "follow",
+    redirect: "manual",
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -43,20 +44,25 @@ async function fetchUpstream(
   return fetch(targetUrl, init);
 }
 
+function isRedirectStatus(status: number) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
 async function proxyRequest(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await context.params;
+  const hasTrailingSlash = request.nextUrl.pathname.endsWith("/");
 
   let response = await fetchUpstream(
     request,
     buildTargetUrl(path, request, false)
   );
 
-  // Для списочных endpoint'ов backend может жить только со слешем на конце.
-  // Если без слеша пришел 404, пробуем тот же путь со слешем.
-  if (response.status === 404 && !request.nextUrl.pathname.endsWith("/")) {
+  // Для списочных backend endpoint'ов сервер иногда корректно отвечает
+  // только на вариант со слешем на конце.
+  if (!hasTrailingSlash && (response.status === 404 || isRedirectStatus(response.status))) {
     response = await fetchUpstream(
       request,
       buildTargetUrl(path, request, true)

@@ -269,7 +269,8 @@ export default function EmployerDetailPage({
         method: "POST",
       });
 
-      const data = (await response.json()) as { detail?: string };
+      const text = await response.text();
+      const data = text ? (JSON.parse(text) as { detail?: string }) : {};
 
       if (!response.ok) {
         throw new Error(data.detail || "Не удалось изменить статус");
