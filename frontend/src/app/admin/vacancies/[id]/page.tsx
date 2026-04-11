@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { formatReadyToStart } from "@/lib/format";
+import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
 import { statusLabel } from "@/lib/status";
 
 type CandidateItem = {
@@ -58,6 +59,58 @@ type VacancyFunnel = {
   total_matches: number;
   by_status: Record<string, number>;
 };
+
+type MatchAction = {
+  action: string;
+  label: string;
+  successText: string;
+};
+
+function getAllowedActions(status: string): MatchAction[] {
+  const transitions: Record<string, MatchAction[]> = {
+    shortlist: [
+      { action: "send", label: "Отправить", successText: "Кандидат отправлен работодателю" },
+      { action: "view", label: "Просмотрен", successText: "Работодатель просмотрел кандидата" },
+      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    sent: [
+      { action: "view", label: "Просмотрен", successText: "Работодатель просмотрел кандидата" },
+      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    viewed: [
+      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    invited: [
+      { action: "interview", label: "Собеседование", successText: "Собеседование отмечено" },
+      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
+    ],
+    interviewed: [
+      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
+    ],
+    offered: [
+      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    rejected: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    no_show: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    hired: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+  };
+
+  return transitions[status] || [];
+}
 
 export default function AdminVacancyDetailPage({
   params,
@@ -206,93 +259,75 @@ export default function AdminVacancyDetailPage({
           </div>
         ) : (
           <div className="mt-4 space-y-4">
-            {shortlist.matches.map((match) => (
-              <div
-                key={match.id}
-                className="rounded-xl border border-slate-200 p-4 space-y-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="font-medium">{match.candidate.full_name}</div>
-                    <div className="text-sm text-slate-600">
-                      {match.candidate.primary_role} · {match.candidate.city}
-                      {match.candidate.district ? `, ${match.candidate.district}` : ""}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      Опыт: {match.candidate.horeca_experience_months} мес.
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      Готовность: {formatReadyToStart(match.candidate.ready_to_start)}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      Статус отклика: {statusLabel(match.status)}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      Надежность: {reliabilityMap[match.candidate_id] ?? 0} / 100
-                    </div>
-                    {match.comment ? (
-                      <div className="mt-1 text-sm text-slate-500">
-                        Комментарий: {match.comment}
+            {shortlist.matches.map((match) => {
+              const reliabilityScore = reliabilityMap[match.candidate_id] ?? 0;
+              const allowedActions = getAllowedActions(match.status);
+
+              return (
+                <div
+                  key={match.id}
+                  className="rounded-xl border border-slate-200 p-4 space-y-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-medium">{match.candidate.full_name}</div>
+                      <div className="text-sm text-slate-600">
+                        {match.candidate.primary_role} · {match.candidate.city}
+                        {match.candidate.district ? `, ${match.candidate.district}` : ""}
                       </div>
-                    ) : null}
+                      <div className="mt-1 text-sm text-slate-500">
+                        Опыт: {match.candidate.horeca_experience_months} мес.
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        Готовность: {formatReadyToStart(match.candidate.ready_to_start)}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        Статус отклика: {statusLabel(match.status)}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        Индекс надежности: {reliabilityScore} / 100 · {reliabilityLabel(reliabilityScore)}
+                      </div>
+                      {match.comment ? (
+                        <div className="mt-1 text-sm text-slate-500">
+                          Комментарий: {match.comment}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-2 text-right">
+                      <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                        оценка {match.match_score ?? "-"}
+                      </div>
+                      <div
+                        className={`rounded-full border px-3 py-1 text-sm font-medium ${reliabilityBadgeClass(
+                          reliabilityScore
+                        )}`}
+                      >
+                        надежность {reliabilityScore}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-2 text-right">
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                      score {match.match_score ?? "-"}
+                  {allowedActions.length === 0 ? (
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                      Для текущего статуса больше нет доступных действий.
                     </div>
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                      reliability {reliabilityMap[match.candidate_id] ?? 0}
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {allowedActions.map((item) => (
+                        <button
+                          key={item.action}
+                          onClick={() => runMatchAction(match.id, item.action, item.successText)}
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
                     </div>
-                  </div>
+                  )}
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => runMatchAction(match.id, "send", "Кандидат отправлен работодателю")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Отправить
-                  </button>
-                  <button
-                    onClick={() => runMatchAction(match.id, "view", "Работодатель просмотрел кандидата")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Просмотрен
-                  </button>
-                  <button
-                    onClick={() => runMatchAction(match.id, "invite", "Кандидат приглашен")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Пригласить
-                  </button>
-                  <button
-                    onClick={() => runMatchAction(match.id, "interview", "Собеседование отмечено")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Собеседование
-                  </button>
-                  <button
-                    onClick={() => runMatchAction(match.id, "hire", "Кандидат отмечен как нанятый")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Нанять
-                  </button>
-                  <button
-                    onClick={() => runMatchAction(match.id, "reject", "Кандидат отклонен")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Отклонить
-                  </button>
-                  <button
-                    onClick={() => runMatchAction(match.id, "no-show", "Отмечен невыход")}
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Не дошел
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

@@ -59,8 +59,7 @@ export default function AdminEventsPage() {
   }, []);
 
   const eventTypeOptions = useMemo(() => {
-    const uniqueTypes = Array.from(new Set(events.map((event) => event.event_type)));
-    return uniqueTypes;
+    return Array.from(new Set(events.map((event) => event.event_type)));
   }, [events]);
 
   const filteredEvents = useMemo(() => {
@@ -165,14 +164,13 @@ export default function AdminEventsPage() {
                         </div>
 
                         <div className="text-sm text-slate-500">
-                          Candidate ID: {event.candidate_id ?? "-"} · Vacancy ID:{" "}
-                          {event.vacancy_id ?? "-"} · Employer ID:{" "}
+                          Кандидат: {event.candidate_id ?? "-"} · Вакансия:{" "}
+                          {event.vacancy_id ?? "-"} · Работодатель:{" "}
                           {event.employer_id ?? "-"}
                         </div>
 
                         <div className="text-sm text-slate-500">
-                          Комментарий:{" "}
-                          {formatEventComment(event.event_type, event.comment)}
+                          Комментарий: {formatEventComment(event.event_type, event.comment)}
                         </div>
                       </div>
 

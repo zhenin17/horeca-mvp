@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { formatReadyToStart, formatSalary } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
+import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
 
 type CandidateDashboardItem = {
   match_id: number;
@@ -88,7 +89,7 @@ export default function AdminCandidateDetailPage({
       }
 
       if (!reliabilityResponse.ok) {
-        throw new Error("Не удалось загрузить надежность кандидата");
+        throw new Error("Не удалось загрузить индекс надежности кандидата");
       }
 
       const candidateData = (await candidateResponse.json()) as CandidateProfile;
@@ -177,7 +178,21 @@ export default function AdminCandidateDetailPage({
       </section>
 
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="text-xl font-semibold">Надежность кандидата</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Индекс надежности</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Оценка строится на основе приглашений, собеседований, наймов, отказов и невыходов.
+            </p>
+          </div>
+          <div
+            className={`rounded-full border px-4 py-2 text-sm font-medium ${reliabilityBadgeClass(
+              reliability.reliability_score
+            )}`}
+          >
+            {reliabilityLabel(reliability.reliability_score)}
+          </div>
+        </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2">

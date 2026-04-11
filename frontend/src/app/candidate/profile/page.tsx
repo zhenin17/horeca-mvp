@@ -20,7 +20,7 @@ type CandidateProfile = {
   is_active: boolean;
 };
 
-export default function ProfilePage() {
+export default function CandidateProfilePage() {
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [saving, setSaving] = useState(false);
@@ -110,7 +110,7 @@ export default function ProfilePage() {
           </div>
 
           <Link
-            href="/onboarding"
+            href="/candidate/onboarding"
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
           >
             Редактировать анкету
@@ -198,19 +198,19 @@ export default function ProfilePage() {
         <h2 className="text-xl font-semibold">Что делать дальше</h2>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
-            href="/"
+            href="/candidate/vacancies"
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
           >
             Смотреть вакансии
           </Link>
           <Link
-            href="/matches"
+            href="/candidate/matches"
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
           >
             Мои отклики
           </Link>
           <Link
-            href="/candidate-start"
+            href="/candidate/start"
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
           >
             На стартовую страницу
