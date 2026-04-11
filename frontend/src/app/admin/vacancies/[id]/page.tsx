@@ -21,13 +21,13 @@ type CandidateItem = {
 
 type CandidateReliability = {
   candidate_id: number;
-  total_matches: int;
-  invited_count: int;
-  interviewed_count: int;
-  hired_count: int;
-  rejected_count: int;
-  no_show_count: int;
-  reliability_score: int;
+  total_matches: number;
+  invited_count: number;
+  interviewed_count: number;
+  hired_count: number;
+  rejected_count: number;
+  no_show_count: number;
+  reliability_score: number;
 };
 
 type MatchItem = {
