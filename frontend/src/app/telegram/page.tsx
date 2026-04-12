@@ -92,7 +92,10 @@ export default function TelegramEntryPage() {
 
         setTelegramUser(data);
 
-        const presetName = [data.first_name, data.last_name].filter(Boolean).join(" ").trim();
+        const presetName = [data.first_name, data.last_name]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
 
         setCandidateForm((prev) => ({
           ...prev,
@@ -223,6 +226,7 @@ export default function TelegramEntryPage() {
       }
 
       const refreshed = await refreshTelegramUser();
+      setCreateRole(null);
       if (refreshed) {
         saveRole("candidate", refreshed);
       }
@@ -291,6 +295,7 @@ export default function TelegramEntryPage() {
       }
 
       const refreshed = await refreshTelegramUser();
+      setCreateRole(null);
       if (refreshed) {
         saveRole("employer", refreshed);
       }
@@ -319,13 +324,6 @@ export default function TelegramEntryPage() {
           </h1>
           <div className="mt-3 text-sm text-red-700">{errorText}</div>
         </section>
-
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <div className="text-sm text-slate-600">Для теста в браузере открой:</div>
-          <div className="mt-2 rounded-xl bg-slate-50 p-3 font-mono text-sm">
-            /telegram?tg_test=1
-          </div>
-        </section>
       </main>
     );
   }
@@ -343,96 +341,13 @@ export default function TelegramEntryPage() {
   const hasCandidate = Boolean(telegramUser.candidate_id);
   const hasEmployer = Boolean(telegramUser.employer_id);
 
-  if (hasCandidate && !hasEmployer) {
-    return (
-      <main className="space-y-6 px-4 py-6">
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h1 className="text-2xl font-semibold">Добро пожаловать</h1>
-          <div className="mt-3 text-sm text-slate-600">
-            У вас уже есть профиль кандидата. Переходим дальше.
-          </div>
-          <div className="mt-5">
-            <button
-              type="button"
-              onClick={() => saveRole("candidate")}
-              className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Продолжить как кандидат
-            </button>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (!hasCandidate && hasEmployer) {
-    return (
-      <main className="space-y-6 px-4 py-6">
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <h1 className="text-2xl font-semibold">Добро пожаловать</h1>
-          <div className="mt-3 text-sm text-slate-600">
-            У вас уже есть профиль работодателя. Переходим дальше.
-          </div>
-          <div className="mt-5">
-            <button
-              type="button"
-              onClick={() => saveRole("employer")}
-              className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white"
-            >
-              Продолжить как работодатель
-            </button>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (hasCandidate && hasEmployer) {
-    return (
-      <main className="space-y-6 px-4 py-6">
-        <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-          <p className="text-sm text-slate-500">Telegram вход</p>
-          <h1 className="mt-2 text-2xl font-semibold">Кем хотите зайти сейчас?</h1>
-          <div className="mt-2 text-sm text-slate-600">
-            Для этого Telegram-пользователя уже есть обе роли.
-          </div>
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => saveRole("candidate")}
-            className="rounded-2xl border border-slate-200 p-5 text-left shadow-sm hover:bg-slate-50"
-          >
-            <div className="text-lg font-semibold">Кандидат</div>
-            <div className="mt-2 text-sm text-slate-600">
-              Смотреть вакансии, откликаться и следить за статусами.
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => saveRole("employer")}
-            className="rounded-2xl border border-slate-200 p-5 text-left shadow-sm hover:bg-slate-50"
-          >
-            <div className="text-lg font-semibold">Работодатель</div>
-            <div className="mt-2 text-sm text-slate-600">
-              Смотреть кандидатов, работать со статусами и вакансиями.
-            </div>
-          </button>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="space-y-6 px-4 py-6">
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <p className="text-sm text-slate-500">Telegram вход</p>
-        <h1 className="mt-2 text-2xl font-semibold">Добро пожаловать в Hubsty</h1>
+        <h1 className="mt-2 text-2xl font-semibold">Выберите роль</h1>
         <div className="mt-3 text-sm text-slate-600">
-          Для этого Telegram-пользователя пока нет ни одной роли. Выберите, как
-          хотите использовать сервис.
+          Здесь можно продолжить в уже созданной роли или добавить вторую.
         </div>
       </section>
 
@@ -444,27 +359,65 @@ export default function TelegramEntryPage() {
 
       {!createRole ? (
         <section className="grid gap-4 md:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setCreateRole("candidate")}
-            className="rounded-2xl border border-slate-200 p-5 text-left shadow-sm hover:bg-slate-50"
-          >
-            <div className="text-lg font-semibold">Я кандидат</div>
+          <div className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="text-lg font-semibold">Кандидат</div>
             <div className="mt-2 text-sm text-slate-600">
-              Ищу работу и хочу получать понятные статусы по откликам.
+              Смотреть вакансии, откликаться и следить за статусами.
             </div>
-          </button>
 
-          <button
-            type="button"
-            onClick={() => setCreateRole("employer")}
-            className="rounded-2xl border border-slate-200 p-5 text-left shadow-sm hover:bg-slate-50"
-          >
-            <div className="text-lg font-semibold">Я работодатель</div>
-            <div className="mt-2 text-sm text-slate-600">
-              Нанимаю сотрудников и хочу быстро работать с кандидатами.
+            <div className="mt-4">
+              {hasCandidate ? (
+                <button
+                  type="button"
+                  onClick={() => saveRole("candidate")}
+                  className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                >
+                  Продолжить как кандидат
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorText("");
+                    setCreateRole("candidate");
+                  }}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                >
+                  Создать роль кандидата
+                </button>
+              )}
             </div>
-          </button>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+            <div className="text-lg font-semibold">Работодатель</div>
+            <div className="mt-2 text-sm text-slate-600">
+              Смотреть кандидатов, работать со статусами и вакансиями.
+            </div>
+
+            <div className="mt-4">
+              {hasEmployer ? (
+                <button
+                  type="button"
+                  onClick={() => saveRole("employer")}
+                  className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white"
+                >
+                  Продолжить как работодатель
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorText("");
+                    setCreateRole("employer");
+                  }}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+                >
+                  Создать роль работодателя
+                </button>
+              )}
+            </div>
+          </div>
         </section>
       ) : null}
 
