@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <body className="bg-white text-slate-900">
         <Script
           src="https://telegram.org/js/telegram-web-app.js"

@@ -28,9 +28,10 @@ export default function ClientShell({ children }: Props) {
   const [activeRole, setActiveRole] = useState<ActiveRole>(null);
 
   useEffect(() => {
-    setIsTelegram(isTelegramWebApp());
+    const telegramMode = isTelegramWebApp();
+    setIsTelegram(telegramMode);
 
-    if (typeof window !== "undefined") {
+    if (telegramMode && typeof window !== "undefined") {
       const savedRole = window.localStorage.getItem("hubsty_active_role");
       if (savedRole === "candidate" || savedRole === "employer") {
         setActiveRole(savedRole);

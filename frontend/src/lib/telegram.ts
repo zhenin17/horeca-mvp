@@ -11,6 +11,7 @@ export type TelegramWebApp = {
   close: () => void;
   colorScheme?: "light" | "dark";
   themeParams?: Record<string, string>;
+  initData?: string;
   initDataUnsafe?: {
     user?: {
       id?: number;
@@ -38,8 +39,21 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp ?? null;
 }
 
+export function hasTelegramUserContext(): boolean {
+  const webApp = getTelegramWebApp();
+
+  if (!webApp) {
+    return false;
+  }
+
+  return Boolean(
+    webApp.initDataUnsafe?.user?.id ||
+      (webApp.initData && webApp.initData.length > 0)
+  );
+}
+
 export function isTelegramWebApp(): boolean {
-  return Boolean(getTelegramWebApp());
+  return hasTelegramUserContext();
 }
 
 export function prepareTelegramWebApp() {
