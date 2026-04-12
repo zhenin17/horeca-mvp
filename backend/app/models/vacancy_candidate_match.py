@@ -20,3 +20,5 @@ class VacancyCandidateMatch(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
     candidate = relationship("Candidate", back_populates="matches")
+    employer = relationship("Employer", back_populates="matches")
+    vacancy = relationship("Vacancy", back_populates="matches")

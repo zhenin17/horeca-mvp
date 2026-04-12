@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
 
@@ -21,3 +21,7 @@ class Vacancy(Base):
     needed_start: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="new")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    employer = relationship("Employer", back_populates="vacancies")
+    matches = relationship("VacancyCandidateMatch", back_populates="vacancy")
+    funnel_events = relationship("FunnelEvent", back_populates="vacancy")
