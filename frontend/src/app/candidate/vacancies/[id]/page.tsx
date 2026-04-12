@@ -231,7 +231,7 @@ export default function CandidateVacancyDetailsPage() {
       const [candidateResponse, vacancyResponse, matchesResponse] = await Promise.all([
         fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
         fetch(`/api/vacancies/${vacancyId}`, { cache: "no-store" }),
-        fetch(`/api/matches?candidate_id=${candidateId}`, { cache: "no-store" }),
+        fetch(`/api/matches/?candidate_id=${candidateId}`, { cache: "no-store" }),
       ]);
 
       if (!candidateResponse.ok) {

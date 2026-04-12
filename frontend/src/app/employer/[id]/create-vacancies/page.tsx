@@ -105,7 +105,7 @@ export default function EmployerCreateVacancyPage() {
         status: form.status,
       };
 
-      const response = await fetch("/api/vacancies", {
+      const response = await fetch("/api/vacancies/", {
         method: "POST",
         headers: {
           "content-type": "application/json",

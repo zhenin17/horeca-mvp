@@ -391,7 +391,7 @@ export default function EmployerDashboardPage() {
       const [employersResponse, vacanciesResponse, matchesResponse] = await Promise.all([
         fetch("/api/employers/", { cache: "no-store" }),
         fetch("/api/vacancies/", { cache: "no-store" }),
-        fetch(`/api/matches?employer_id=${employerId}`, { cache: "no-store" }),
+        fetch(`/api/matches/?employer_id=${employerId}`, { cache: "no-store" }),
       ]);
 
       if (!employersResponse.ok) {
