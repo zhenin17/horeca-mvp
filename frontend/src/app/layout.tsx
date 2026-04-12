@@ -1,23 +1,30 @@
-import "./globals.css";
+import type { Metadata } from "next";
+import Script from "next/script";
 import Link from "next/link";
-import type { ReactNode } from "react";
-import TelegramShell from "@/components/telegram-shell";
+import "./globals.css";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Hubsty",
   description: "MVP найма для HoReCa",
 };
 
 export default function RootLayout({
   children,
-}: {
-  children: ReactNode;
-}) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="ru">
       <body className="bg-white text-slate-900">
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="beforeInteractive"
+        />
+
         <div className="mx-auto min-h-screen max-w-5xl">
-          <TelegramShell />
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
+            <div>Режим браузера</div>
+          </div>
 
           <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
             <div className="flex items-center justify-between px-4 py-3">
@@ -33,7 +40,7 @@ export default function RootLayout({
             </div>
           </header>
 
-          {children}
+          <main className="px-4 py-6">{children}</main>
         </div>
       </body>
     </html>
