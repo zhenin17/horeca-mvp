@@ -1,4 +1,6 @@
-from sqlalchemy import BigInteger, Boolean, Integer, String
+from datetime import datetime
+
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -19,6 +21,7 @@ class Candidate(Base):
     ready_to_start: Mapped[str] = mapped_column(String(255), nullable=False)
     expected_income: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     matches = relationship("VacancyCandidateMatch", back_populates="candidate")
     funnel_events = relationship("FunnelEvent", back_populates="candidate")

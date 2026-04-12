@@ -1,4 +1,6 @@
-from sqlalchemy import BigInteger, String
+from datetime import datetime
+
+from sqlalchemy import BigInteger, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -15,6 +17,7 @@ class Employer(Base):
     telegram_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str] = mapped_column(String(255), nullable=False)
     website: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     vacancies = relationship("Vacancy", back_populates="employer")
     matches = relationship("VacancyCandidateMatch", back_populates="employer")
