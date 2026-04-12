@@ -1,13 +1,13 @@
 from pydantic import BaseModel
-from typing import Optional
 
 
 class EmployerCreate(BaseModel):
     company_name: str
     contact_name: str
     phone: str
-    telegram_username: Optional[str] = None
+    telegram_username: str | None = None
     city: str
+    website: str | None = None
 
 
 class EmployerRead(BaseModel):
@@ -15,8 +15,9 @@ class EmployerRead(BaseModel):
     company_name: str
     contact_name: str
     phone: str
-    telegram_username: Optional[str] = None
+    telegram_username: str | None = None
     city: str
+    website: str | None = None
 
     class Config:
         from_attributes = True

@@ -24,9 +24,14 @@ function buildTargetUrl(
   return url.toString();
 }
 
+function isRedirectStatus(status: number) {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
 async function fetchUpstream(
   request: NextRequest,
-  targetUrl: string
+  targetUrl: string,
+  requestBody?: string
 ): Promise<Response> {
   const headers = new Headers(request.headers);
   headers.delete("host");
@@ -37,15 +42,11 @@ async function fetchUpstream(
     redirect: "manual",
   };
 
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.text();
+  if (request.method !== "GET" && request.method !== "HEAD" && requestBody !== undefined) {
+    init.body = requestBody;
   }
 
   return fetch(targetUrl, init);
-}
-
-function isRedirectStatus(status: number) {
-  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
 async function proxyRequest(
@@ -55,17 +56,24 @@ async function proxyRequest(
   const { path } = await context.params;
   const hasTrailingSlash = request.nextUrl.pathname.endsWith("/");
 
+  const requestBody =
+    request.method !== "GET" && request.method !== "HEAD"
+      ? await request.text()
+      : undefined;
+
   let response = await fetchUpstream(
     request,
-    buildTargetUrl(path, request, false)
+    buildTargetUrl(path, request, false),
+    requestBody
   );
 
-  // Для списочных backend endpoint'ов сервер иногда корректно отвечает
-  // только на вариант со слешем на конце.
+  // Для списочных и create endpoint'ов backend может отвечать только на вариант со слешем.
+  // Если без слеша пришел redirect или 404, пробуем повторно со слешем.
   if (!hasTrailingSlash && (response.status === 404 || isRedirectStatus(response.status))) {
     response = await fetchUpstream(
       request,
-      buildTargetUrl(path, request, true)
+      buildTargetUrl(path, request, true),
+      requestBody
     );
   }
 

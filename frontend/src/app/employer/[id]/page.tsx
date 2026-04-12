@@ -1,10 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
-import { formatReadyToStart, formatSalary } from "@/lib/format";
-import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
-import { statusLabel } from "@/lib/status";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
 
 type EmployerItem = {
   id: number;
@@ -13,6 +11,7 @@ type EmployerItem = {
   phone: string;
   telegram_username?: string | null;
   city: string;
+  website?: string | null;
 };
 
 type VacancyItem = {
@@ -53,24 +52,6 @@ type MatchItem = {
   candidate: CandidateItem;
 };
 
-type VacancyShortlist = {
-  vacancy_id: number;
-  role: string;
-  venue_name: string;
-  city: string;
-  district?: string | null;
-  status: string;
-  matches: MatchItem[];
-};
-
-type VacancyFunnel = {
-  vacancy_id: number;
-  role: string;
-  venue_name: string;
-  total_matches: number;
-  by_status: Record<string, number>;
-};
-
 type CandidateReliability = {
   candidate_id: number;
   total_matches: number;
@@ -82,175 +63,412 @@ type CandidateReliability = {
   reliability_score: number;
 };
 
+type CandidateFilter = "new" | "in_work" | "finished" | "all";
+
 type MatchAction = {
-  action: string;
+  key: string;
   label: string;
+  endpoint: string;
   successText: string;
 };
 
-function getAllowedActions(status: string): MatchAction[] {
-  const transitions: Record<string, MatchAction[]> = {
-    shortlist: [
-      { action: "view", label: "Просмотрен", successText: "Кандидат отмечен как просмотренный" },
-      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
-      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
-    ],
-    sent: [
-      { action: "view", label: "Просмотрен", successText: "Кандидат отмечен как просмотренный" },
-      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
-      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
-    ],
-    viewed: [
-      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
-      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
-    ],
-    invited: [
-      { action: "interview", label: "Собеседование", successText: "Собеседование отмечено" },
-      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
-      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
-    ],
-    interviewed: [
-      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
-      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
-      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
-    ],
-    offered: [
-      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
-      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
-    ],
-    rejected: [
-      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
-    ],
-    no_show: [
-      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
-    ],
-    hired: [
-      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
-    ],
-  };
-
-  return transitions[status] || [];
+function vacancyStatusLabel(status: string) {
+  switch (status) {
+    case "new":
+      return "Новая";
+    case "in_progress":
+      return "В работе";
+    case "shortlist_ready":
+      return "Шорт-лист готов";
+    case "partially_closed":
+      return "Частично закрыта";
+    case "closed":
+      return "Закрыта";
+    case "archived":
+      return "Архив";
+    default:
+      return status || "—";
+  }
 }
 
-export default function EmployerDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+function matchStatusLabel(status: string) {
+  switch (status) {
+    case "shortlist":
+      return "Новый";
+    case "sent":
+      return "Отправлен";
+    case "viewed":
+      return "Просмотрен";
+    case "invited":
+      return "Приглашен";
+    case "interviewed":
+      return "На интервью";
+    case "offered":
+      return "Есть предложение";
+    case "hired":
+      return "Вас приняли";
+    case "rejected":
+      return "Не подошел";
+    case "no_show":
+      return "Не вышел";
+    default:
+      return status || "—";
+  }
+}
 
-  const [employers, setEmployers] = useState<EmployerItem[]>([]);
-  const [vacancies, setVacancies] = useState<VacancyItem[]>([]);
-  const [shortlists, setShortlists] = useState<Record<number, VacancyShortlist>>({});
-  const [funnels, setFunnels] = useState<Record<number, VacancyFunnel>>({});
-  const [reliabilityMap, setReliabilityMap] = useState<Record<number, number>>({});
+function reliabilityLabel(score?: number) {
+  if (score === undefined) {
+    return "Без оценки";
+  }
+  if (score >= 80) {
+    return "Надежный";
+  }
+  if (score >= 60) {
+    return "Проверенный";
+  }
+  if (score >= 40) {
+    return "Новый";
+  }
+  return "Рискованный";
+}
+
+function formatExperience(months: number) {
+  if (months <= 0) {
+    return "Без опыта";
+  }
+
+  const years = Math.floor(months / 12);
+  const restMonths = months % 12;
+
+  if (years > 0 && restMonths > 0) {
+    return `${years} г. ${restMonths} мес.`;
+  }
+  if (years > 0) {
+    return `${years} г.`;
+  }
+  return `${restMonths} мес.`;
+}
+
+function shouldShowContacts(status: string) {
+  return ["invited", "interviewed", "offered", "hired"].includes(status);
+}
+
+function getAvailableActions(status: string): MatchAction[] {
+  switch (status) {
+    case "shortlist":
+      return [
+        {
+          key: "send",
+          label: "Отправлен",
+          endpoint: "send",
+          successText: "Кандидат отмечен как отправленный",
+        },
+        {
+          key: "invite",
+          label: "Пригласить",
+          endpoint: "invite",
+          successText: "Кандидат приглашен",
+        },
+        {
+          key: "reject",
+          label: "Не подходит",
+          endpoint: "reject",
+          successText: "Кандидат отклонен",
+        },
+      ];
+
+    case "sent":
+      return [
+        {
+          key: "view",
+          label: "Просмотрен",
+          endpoint: "view",
+          successText: "Кандидат отмечен как просмотренный",
+        },
+        {
+          key: "invite",
+          label: "Пригласить",
+          endpoint: "invite",
+          successText: "Кандидат приглашен",
+        },
+        {
+          key: "reject",
+          label: "Не подходит",
+          endpoint: "reject",
+          successText: "Кандидат отклонен",
+        },
+      ];
+
+    case "viewed":
+      return [
+        {
+          key: "invite",
+          label: "Пригласить",
+          endpoint: "invite",
+          successText: "Кандидат приглашен",
+        },
+        {
+          key: "reject",
+          label: "Не подходит",
+          endpoint: "reject",
+          successText: "Кандидат отклонен",
+        },
+      ];
+
+    case "invited":
+      return [
+        {
+          key: "interview",
+          label: "Интервью",
+          endpoint: "interview",
+          successText: "Кандидат переведен на этап интервью",
+        },
+        {
+          key: "no-show",
+          label: "Не вышел",
+          endpoint: "no-show",
+          successText: "Кандидат отмечен как не вышедший",
+        },
+        {
+          key: "reject",
+          label: "Не подходит",
+          endpoint: "reject",
+          successText: "Кандидат отклонен",
+        },
+      ];
+
+    case "interviewed":
+      return [
+        {
+          key: "hire",
+          label: "Вас приняли",
+          endpoint: "hire",
+          successText: "Кандидат отмечен как принятый",
+        },
+        {
+          key: "no-show",
+          label: "Не вышел",
+          endpoint: "no-show",
+          successText: "Кандидат отмечен как не вышедший",
+        },
+        {
+          key: "reject",
+          label: "Не подходит",
+          endpoint: "reject",
+          successText: "Кандидат отклонен",
+        },
+      ];
+
+    case "hired":
+    case "rejected":
+    case "no_show":
+      return [
+        {
+          key: "reopen",
+          label: "Вернуть в работу",
+          endpoint: "reopen",
+          successText: "Кандидат возвращен в работу",
+        },
+      ];
+
+    default:
+      return [];
+  }
+}
+
+function belongsToFilter(status: string, filter: CandidateFilter) {
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "new") {
+    return ["shortlist", "sent", "viewed"].includes(status);
+  }
+
+  if (filter === "in_work") {
+    return ["invited", "interviewed", "offered"].includes(status);
+  }
+
+  if (filter === "finished") {
+    return ["hired", "rejected", "no_show"].includes(status);
+  }
+
+  return true;
+}
+
+function fitLabel(score: number) {
+  if (score >= 80) {
+    return "Хорошее совпадение";
+  }
+  if (score >= 65) {
+    return "Подходит";
+  }
+  return "Есть шанс";
+}
+
+function buildCandidateFitReasons(
+  match: MatchItem,
+  vacancy: VacancyItem | null,
+  reliability?: CandidateReliability
+) {
+  const reasons: string[] = [];
+  const candidateRole = match.candidate.primary_role.trim().toLowerCase();
+  const vacancyRole = vacancy?.role.trim().toLowerCase() || "";
+
+  if (candidateRole && vacancyRole) {
+    if (candidateRole === vacancyRole) {
+      reasons.push("Главное: полностью совпадает по роли");
+    } else if (
+      candidateRole.includes(vacancyRole) ||
+      vacancyRole.includes(candidateRole)
+    ) {
+      reasons.push("Главное: близко подходит по роли");
+    }
+  }
+
+  if (
+    vacancy &&
+    match.candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+  ) {
+    reasons.push("В том же городе");
+  }
+
+  if (
+    vacancy?.district &&
+    match.candidate.district &&
+    vacancy.district.trim().toLowerCase() ===
+      match.candidate.district.trim().toLowerCase()
+  ) {
+    reasons.push("Район совпадает");
+  }
+
+  if (match.candidate.horeca_experience_months >= 12) {
+    reasons.push(`Есть опыт: ${formatExperience(match.candidate.horeca_experience_months)}`);
+  } else if (match.candidate.horeca_experience_months > 0) {
+    reasons.push("Есть опыт в HoReCa");
+  }
+
+  if (match.candidate.ready_to_start?.trim()) {
+    reasons.push(`Может выйти: ${match.candidate.ready_to_start}`);
+  }
+
+  if (reliability && reliability.reliability_score >= 60) {
+    reasons.push(`Надежность: ${reliabilityLabel(reliability.reliability_score)}`);
+  }
+
+  if (reasons.length === 0) {
+    reasons.push("Подходит по базовым параметрам");
+  }
+
+  return reasons.slice(0, 3);
+}
+
+export default function EmployerDashboardPage() {
+  const params = useParams<{ id: string }>();
+  const employerId = Number(params?.id);
+
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
-  const [message, setMessage] = useState("");
+  const [messageText, setMessageText] = useState("");
 
-  async function loadData() {
+  const [employer, setEmployer] = useState<EmployerItem | null>(null);
+  const [vacancies, setVacancies] = useState<VacancyItem[]>([]);
+  const [matches, setMatches] = useState<MatchItem[]>([]);
+  const [selectedVacancyId, setSelectedVacancyId] = useState<number | null>(null);
+  const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>("new");
+  const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
+
+  const [reliabilityByCandidateId, setReliabilityByCandidateId] = useState<
+    Record<number, CandidateReliability>
+  >({});
+
+  async function loadPageData() {
     try {
+      setLoading(true);
       setErrorText("");
+      setMessageText("");
 
-      const [employersResponse, vacanciesResponse] = await Promise.all([
+      const [employersResponse, vacanciesResponse, matchesResponse] = await Promise.all([
         fetch("/api/employers/", { cache: "no-store" }),
         fetch("/api/vacancies/", { cache: "no-store" }),
+        fetch(`/api/matches?employer_id=${employerId}`, { cache: "no-store" }),
       ]);
 
       if (!employersResponse.ok) {
         throw new Error("Не удалось загрузить работодателей");
       }
-
       if (!vacanciesResponse.ok) {
         throw new Error("Не удалось загрузить вакансии");
+      }
+      if (!matchesResponse.ok) {
+        throw new Error("Не удалось загрузить кандидатов");
       }
 
       const employersData = (await employersResponse.json()) as EmployerItem[];
       const vacanciesData = (await vacanciesResponse.json()) as VacancyItem[];
+      const matchesData = (await matchesResponse.json()) as MatchItem[];
 
-      setEmployers(employersData);
+      const currentEmployer =
+        employersData.find((item) => item.id === employerId) || null;
 
-      const employerVacancies = vacanciesData.filter(
-        (vacancy) => String(vacancy.employer_id) === id
-      );
+      if (!currentEmployer) {
+        throw new Error("Работодатель не найден");
+      }
+
+      const employerVacancies = vacanciesData
+        .filter((item) => item.employer_id === employerId)
+        .sort((a, b) => b.id - a.id);
+
+      setEmployer(currentEmployer);
       setVacancies(employerVacancies);
+      setMatches(matchesData);
 
-      const shortlistPairs = await Promise.all(
-        employerVacancies.map(async (vacancy) => {
-          const response = await fetch(`/api/shortlists/vacancy/${vacancy.id}`, {
-            cache: "no-store",
-          });
+      setSelectedVacancyId((prev) => {
+        if (prev && employerVacancies.some((item) => item.id === prev)) {
+          return prev;
+        }
+        return employerVacancies[0]?.id ?? null;
+      });
 
-          if (!response.ok) {
-            return [vacancy.id, null] as const;
-          }
-
-          const data = (await response.json()) as VacancyShortlist;
-          return [vacancy.id, data] as const;
-        })
+      const uniqueCandidateIds = Array.from(
+        new Set(matchesData.map((item) => item.candidate_id))
       );
 
-      const funnelPairs = await Promise.all(
-        employerVacancies.map(async (vacancy) => {
-          const response = await fetch(`/api/shortlists/vacancy/${vacancy.id}/funnel`, {
-            cache: "no-store",
-          });
-
-          if (!response.ok) {
-            return [vacancy.id, null] as const;
-          }
-
-          const data = (await response.json()) as VacancyFunnel;
-          return [vacancy.id, data] as const;
-        })
-      );
-
-      const shortlistMap = Object.fromEntries(
-        shortlistPairs.filter(([, value]) => value)
-      ) as Record<number, VacancyShortlist>;
-
-      const funnelMap = Object.fromEntries(
-        funnelPairs.filter(([, value]) => value)
-      ) as Record<number, VacancyFunnel>;
-
-      setShortlists(shortlistMap);
-      setFunnels(funnelMap);
-
-      const candidateIds = Array.from(
-        new Set(
-          Object.values(shortlistMap).flatMap((shortlist) =>
-            shortlist.matches.map((match) => match.candidate_id)
-          )
-        )
-      );
-
-      const reliabilityEntries = await Promise.all(
-        candidateIds.map(async (candidateId) => {
-          try {
-            const response = await fetch(`/api/candidates/${candidateId}/reliability`, {
-              cache: "no-store",
-            });
-
-            if (!response.ok) {
-              return [candidateId, 0] as const;
+      if (uniqueCandidateIds.length > 0) {
+        const reliabilityResults = await Promise.all(
+          uniqueCandidateIds.map(async (candidateId) => {
+            try {
+              const response = await fetch(
+                `/api/candidates/${candidateId}/reliability`,
+                { cache: "no-store" }
+              );
+              if (!response.ok) {
+                return null;
+              }
+              const data = (await response.json()) as CandidateReliability;
+              return data;
+            } catch {
+              return null;
             }
+          })
+        );
 
-            const data = (await response.json()) as CandidateReliability;
-            return [candidateId, data.reliability_score] as const;
-          } catch {
-            return [candidateId, 0] as const;
+        const nextReliability: Record<number, CandidateReliability> = {};
+        for (const item of reliabilityResults) {
+          if (item) {
+            nextReliability[item.candidate_id] = item;
           }
-        })
-      );
-
-      setReliabilityMap(Object.fromEntries(reliabilityEntries));
+        }
+        setReliabilityByCandidateId(nextReliability);
+      } else {
+        setReliabilityByCandidateId({});
+      }
     } catch (error) {
       console.error(error);
-
       if (error instanceof Error) {
         setErrorText(error.message);
       } else {
-        setErrorText("Не удалось загрузить страницу работодателя");
+        setErrorText("Не удалось загрузить кабинет работодателя");
       }
     } finally {
       setLoading(false);
@@ -258,56 +476,217 @@ export default function EmployerDetailPage({
   }
 
   useEffect(() => {
-    loadData();
-  }, [id]);
+    if (!Number.isFinite(employerId)) {
+      setLoading(false);
+      setErrorText("Некорректный идентификатор работодателя");
+      return;
+    }
 
-  async function runMatchAction(matchId: number, action: string, successText: string) {
-    setMessage("");
+    void loadPageData();
+  }, [employerId]);
 
+  const vacanciesWithStats = useMemo(() => {
+    return vacancies.map((vacancy) => {
+      const vacancyMatches = matches.filter((item) => item.vacancy_id === vacancy.id);
+
+      const totalCount = vacancyMatches.length;
+      const newCount = vacancyMatches.filter((item) =>
+        ["shortlist", "sent", "viewed"].includes(item.status)
+      ).length;
+      const inWorkCount = vacancyMatches.filter((item) =>
+        ["invited", "interviewed", "offered"].includes(item.status)
+      ).length;
+      const finishedCount = vacancyMatches.filter((item) =>
+        ["hired", "rejected", "no_show"].includes(item.status)
+      ).length;
+      const hiredCount = vacancyMatches.filter((item) => item.status === "hired").length;
+
+      return {
+        ...vacancy,
+        totalCount,
+        newCount,
+        inWorkCount,
+        finishedCount,
+        hiredCount,
+      };
+    });
+  }, [vacancies, matches]);
+
+  const selectedVacancy = useMemo(() => {
+    return vacanciesWithStats.find((item) => item.id === selectedVacancyId) || null;
+  }, [vacanciesWithStats, selectedVacancyId]);
+
+  const selectedVacancyMatches = useMemo(() => {
+    const filtered = matches
+      .filter((item) => item.vacancy_id === selectedVacancyId)
+      .filter((item) => belongsToFilter(item.status, candidateFilter));
+
+    return filtered.sort((a, b) => {
+      const scoreA = a.match_score ?? 0;
+      const scoreB = b.match_score ?? 0;
+      return scoreB - scoreA;
+    });
+  }, [matches, selectedVacancyId, candidateFilter]);
+
+  const dashboardStats = useMemo(() => {
+    const activeVacancies = vacanciesWithStats.filter((item) =>
+      !["closed", "archived"].includes(item.status)
+    ).length;
+
+    const newCandidates = matches.filter((item) =>
+      ["shortlist", "sent", "viewed"].includes(item.status)
+    ).length;
+
+    const inWorkCandidates = matches.filter((item) =>
+      ["invited", "interviewed", "offered"].includes(item.status)
+    ).length;
+
+    const hiredCandidates = matches.filter((item) => item.status === "hired").length;
+
+    return {
+      activeVacancies,
+      newCandidates,
+      inWorkCandidates,
+      hiredCandidates,
+    };
+  }, [vacanciesWithStats, matches]);
+
+  async function runMatchAction(matchId: number, endpoint: string, successText: string) {
     try {
-      const response = await fetch(`/api/matches/${matchId}/${action}`, {
+      setBusyMatchId(matchId);
+      setMessageText("");
+      setErrorText("");
+  
+      const response = await fetch(`/api/matches/${matchId}/${endpoint}`, {
         method: "POST",
       });
-
+  
       const text = await response.text();
-      const data = text ? (JSON.parse(text) as { detail?: string }) : {};
-
+      const data = text ? JSON.parse(text) : null;
+  
       if (!response.ok) {
-        throw new Error(data.detail || "Не удалось изменить статус");
+        throw new Error(data?.detail || "Не удалось изменить статус");
       }
-
-      setMessage(successText);
-      await loadData();
+  
+      if (endpoint === "invite") {
+        setCandidateFilter("in_work");
+        setMessageText("Кандидат приглашен. Контакты открыты.");
+      } else if (endpoint === "reopen") {
+        setCandidateFilter("new");
+        setMessageText("Кандидат возвращен в работу.");
+      } else if (
+        endpoint === "reject" ||
+        endpoint === "no-show" ||
+        endpoint === "hire"
+      ) {
+        setCandidateFilter("finished");
+        setMessageText(successText);
+      } else {
+        setMessageText(successText);
+      }
+  
+      await loadPageData();
     } catch (error) {
       console.error(error);
       if (error instanceof Error) {
-        setMessage(error.message);
+        setErrorText(error.message);
       } else {
-        setMessage("Не удалось изменить статус");
+        setErrorText("Не удалось изменить статус");
       }
+    } finally {
+      setBusyMatchId(null);
     }
   }
 
-  const employer = useMemo(
-    () => employers.find((item) => String(item.id) === id) || null,
-    [employers, id]
-  );
-
   if (loading) {
-    return <main className="px-4 py-6">Загрузка...</main>;
+    return <main className="px-4 py-6">Загрузка кабинета работодателя...</main>;
+  }
+
+  if (errorText && !employer) {
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {errorText}
+        </div>
+      </main>
+    );
   }
 
   if (!employer) {
-    return <main className="px-4 py-6">Работодатель не найден</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+          Работодатель не найден.
+        </div>
+      </main>
+    );
   }
 
   return (
     <main className="space-y-6 px-4 py-6">
-      <div>
-        <Link href="/employer/list" className="text-sm text-slate-600 underline">
-          ← Назад к работодателям
-        </Link>
-      </div>
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm text-slate-500">Кабинет работодателя</p>
+            <h1 className="mt-2 text-2xl font-semibold">{employer.company_name}</h1>
+            <div className="mt-3 space-y-1 text-sm text-slate-600">
+              <div>Контакт: {employer.contact_name}</div>
+              <div>Телефон: {employer.phone}</div>
+              <div>Город: {employer.city}</div>
+              {employer.telegram_username ? (
+                <div>Telegram: @{employer.telegram_username}</div>
+              ) : null}
+              {employer.website ? <div>Сайт: {employer.website}</div> : null}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href={`/employer/${employer.id}/create-vacancies`}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Создать вакансию
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                void loadPageData();
+              }}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Обновить
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Активные вакансии</div>
+          <div className="mt-2 text-2xl font-semibold">{dashboardStats.activeVacancies}</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Новые кандидаты</div>
+          <div className="mt-2 text-2xl font-semibold">{dashboardStats.newCandidates}</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="text-sm text-slate-500">В работе</div>
+          <div className="mt-2 text-2xl font-semibold">{dashboardStats.inWorkCandidates}</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Приняты</div>
+          <div className="mt-2 text-2xl font-semibold">{dashboardStats.hiredCandidates}</div>
+        </div>
+      </section>
+
+      {messageText ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {messageText}
+        </div>
+      ) : null}
 
       {errorText ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -315,56 +694,43 @@ export default function EmployerDetailPage({
         </div>
       ) : null}
 
-      {message ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-          {message}
-        </div>
-      ) : null}
-
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-500">Работодатель</p>
-            <h1 className="mt-1 text-2xl font-semibold">{employer.company_name}</h1>
-          </div>
-
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-xl font-semibold">Мои вакансии</h2>
           <Link
-            href={`/employer/${employer.id}/create-vacancy`}
+            href={`/employer/${employer.id}/create-vacancies`}
             className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
           >
-            Создать вакансию
+            Добавить вакансию
           </Link>
         </div>
 
-        <div className="mt-4 space-y-2 text-sm text-slate-700">
-          <div>Контакт: {employer.contact_name}</div>
-          <div>Телефон: {employer.phone}</div>
-          <div>Telegram: {employer.telegram_username || "-"}</div>
-          <div>Город: {employer.city}</div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h2 className="text-xl font-semibold">Вакансии работодателя</h2>
-
-        {vacancies.length === 0 ? (
+        {vacanciesWithStats.length === 0 ? (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
             У работодателя пока нет вакансий.
           </div>
         ) : (
-          <div className="mt-4 space-y-6">
-            {vacancies.map((vacancy) => {
-              const shortlist = shortlists[vacancy.id];
-              const funnel = funnels[vacancy.id];
+          <div className="mt-4 space-y-3">
+            {vacanciesWithStats.map((vacancy) => {
+              const isSelected = vacancy.id === selectedVacancyId;
+              const needsAttention = vacancy.newCount > 0;
 
               return (
-                <div
+                <button
                   key={vacancy.id}
-                  className="rounded-2xl border border-slate-200 p-4 space-y-4"
+                  type="button"
+                  onClick={() => setSelectedVacancyId(vacancy.id)}
+                  className={`w-full rounded-xl border p-4 text-left transition ${
+                    isSelected
+                      ? "border-slate-900 bg-slate-50"
+                      : needsAttention
+                        ? "border-amber-300 bg-amber-50 hover:bg-amber-100"
+                        : "border-slate-200 hover:bg-slate-50"
+                  }`}
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <div className="text-lg font-semibold">
+                      <div className="font-medium">
                         {vacancy.role} · {vacancy.venue_name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
@@ -372,113 +738,228 @@ export default function EmployerDetailPage({
                         {vacancy.district ? `, ${vacancy.district}` : ""}
                       </div>
                       <div className="mt-1 text-sm text-slate-500">
-                        Статус: {statusLabel(vacancy.status)}
+                        Статус: {vacancyStatusLabel(vacancy.status)}
                       </div>
                       <div className="mt-1 text-sm text-slate-500">
-                        Ставка / доход: {formatSalary(vacancy.salary_text)}
+                        График: {vacancy.schedule_text || "—"}
                       </div>
                       <div className="mt-1 text-sm text-slate-500">
-                        График: {vacancy.schedule_text || "-"}
+                        Доход: {vacancy.salary_text || "—"}
                       </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        Когда нужен выход: {formatReadyToStart(vacancy.needed_start)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {funnel ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      {Object.entries(funnel.by_status).map(([status, count]) => (
-                        <div key={status} className="rounded-xl bg-slate-50 p-3">
-                          <div className="text-xs text-slate-500">{statusLabel(status)}</div>
-                          <div className="mt-1 text-xl font-semibold">{count}</div>
+                      {needsAttention ? (
+                        <div className="mt-2 text-sm font-medium text-amber-800">
+                          Требуют внимания: {vacancy.newCount} новых
                         </div>
-                      ))}
+                      ) : null}
                     </div>
-                  ) : null}
 
-                  <div>
-                    <h3 className="text-lg font-semibold">Shortlist</h3>
-
-                    {!shortlist || shortlist.matches.length === 0 ? (
-                      <div className="mt-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-                        Пока нет кандидатов в shortlist.
+                    <div className="grid grid-cols-2 gap-2 text-sm md:min-w-[280px]">
+                      <div className="rounded-lg bg-slate-100 px-3 py-2">
+                        Всего: {vacancy.totalCount}
                       </div>
-                    ) : (
-                      <div className="mt-3 space-y-3">
-                        {shortlist.matches.map((match) => {
-                          const reliabilityScore = reliabilityMap[match.candidate_id] ?? 0;
-                          const allowedActions = getAllowedActions(match.status);
-
-                          return (
-                            <div
-                              key={match.id}
-                              className="rounded-xl border border-slate-200 p-4 space-y-4"
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <div className="font-medium">{match.candidate.full_name}</div>
-                                  <div className="text-sm text-slate-600">
-                                    {match.candidate.primary_role} · {match.candidate.city}
-                                    {match.candidate.district
-                                      ? `, ${match.candidate.district}`
-                                      : ""}
-                                  </div>
-                                  <div className="mt-1 text-sm text-slate-500">
-                                    Статус отклика: {statusLabel(match.status)}
-                                  </div>
-                                  <div className="mt-1 text-sm text-slate-500">
-                                    Опыт: {match.candidate.horeca_experience_months} мес.
-                                  </div>
-                                  <div className="mt-1 text-sm text-slate-500">
-                                    Индекс надежности: {reliabilityScore} / 100 ·{" "}
-                                    {reliabilityLabel(reliabilityScore)}
-                                  </div>
-                                </div>
-
-                                <div className="space-y-2 text-right">
-                                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                                    оценка {match.match_score ?? "-"}
-                                  </div>
-                                  <div
-                                    className={`rounded-full border px-3 py-1 text-sm font-medium ${reliabilityBadgeClass(
-                                      reliabilityScore
-                                    )}`}
-                                  >
-                                    надежность {reliabilityScore}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {allowedActions.length === 0 ? (
-                                <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
-                                  Для текущего статуса больше нет доступных действий.
-                                </div>
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {allowedActions.map((item) => (
-                                    <button
-                                      key={item.action}
-                                      onClick={() =>
-                                        runMatchAction(match.id, item.action, item.successText)
-                                      }
-                                      className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                                    >
-                                      {item.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                      <div className="rounded-lg bg-amber-100 px-3 py-2">
+                        Новые: {vacancy.newCount}
                       </div>
-                    )}
+                      <div className="rounded-lg bg-sky-100 px-3 py-2">
+                        В работе: {vacancy.inWorkCount}
+                      </div>
+                      <div className="rounded-lg bg-emerald-100 px-3 py-2">
+                        Завершены: {vacancy.finishedCount}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        {!selectedVacancy ? (
+          <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            Выберите вакансию, чтобы посмотреть кандидатов.
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">
+                  Кандидаты по вакансии: {selectedVacancy.role}
+                </h2>
+                <div className="mt-2 space-y-1 text-sm text-slate-600">
+                  <div>Точка: {selectedVacancy.venue_name}</div>
+                  <div>
+                    Район: {selectedVacancy.city}
+                    {selectedVacancy.district ? `, ${selectedVacancy.district}` : ""}
+                  </div>
+                  <div>Статус вакансии: {vacancyStatusLabel(selectedVacancy.status)}</div>
+                  <div>Нужен человек: {selectedVacancy.needed_start || "—"}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {(["new", "in_work", "finished", "all"] as CandidateFilter[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setCandidateFilter(item)}
+                    className={`rounded-xl border px-3 py-2 text-sm ${
+                      candidateFilter === item
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    {item === "new"
+                      ? "Новые"
+                      : item === "in_work"
+                        ? "В работе"
+                        : item === "finished"
+                          ? "Завершены"
+                          : "Все"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selectedVacancyMatches.length === 0 ? (
+              <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+                По выбранному фильтру кандидатов пока нет.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {selectedVacancyMatches.map((match) => {
+                  const reliability = reliabilityByCandidateId[match.candidate_id];
+                  const actions = getAvailableActions(match.status);
+                  const contactsOpened = shouldShowContacts(match.status);
+                  const fitReasons = buildCandidateFitReasons(
+                    match,
+                    selectedVacancy || null,
+                    reliability
+                  );
+                  const score = match.match_score ?? 0;
+
+                  return (
+                    <div
+                      key={match.id}
+                      className="rounded-xl border border-slate-200 p-4"
+                    >
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div className="space-y-3">
+                          <div className="font-medium">{match.candidate.full_name}</div>
+
+                          <div className="text-sm text-slate-600">
+                            Роль: {match.candidate.primary_role}
+                          </div>
+
+                          <div className="text-sm text-slate-600">
+                            Район: {match.candidate.city}
+                            {match.candidate.district
+                              ? `, ${match.candidate.district}`
+                              : ""}
+                          </div>
+
+                          <div className="text-sm text-slate-600">
+                            Опыт: {formatExperience(match.candidate.horeca_experience_months)}
+                          </div>
+
+                          <div className="text-sm text-slate-600">
+                            Готов выйти: {match.candidate.ready_to_start}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 pt-1 text-xs">
+                            <span className="rounded-full bg-slate-100 px-3 py-1">
+                              {fitLabel(score)} · {score}
+                            </span>
+
+                            <span className="rounded-full bg-slate-100 px-3 py-1">
+                              Статус: {matchStatusLabel(match.status)}
+                            </span>
+
+                            <span className="rounded-full bg-slate-100 px-3 py-1">
+                              Надежность:{" "}
+                              {reliability
+                                ? `${reliabilityLabel(reliability.reliability_score)} (${reliability.reliability_score})`
+                                : "Без оценки"}
+                            </span>
+                          </div>
+
+                          <div>
+                            <div className="text-xs uppercase tracking-wide text-slate-500">
+                              Почему подходит
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {fitReasons.map((reason) => (
+                                <span
+                                  key={reason}
+                                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700"
+                                >
+                                  {reason}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {contactsOpened ? (
+                            <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+                              <div>Телефон: {match.candidate.phone}</div>
+                              {match.candidate.telegram_username ? (
+                                <div className="mt-1">
+                                  Telegram: @{match.candidate.telegram_username}
+                                </div>
+                              ) : (
+                                <div className="mt-1 text-emerald-700">
+                                  Telegram не указан
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                              Контакты откроются после приглашения кандидата.
+                            </div>
+                          )}
+
+                          {match.comment ? (
+                            <div className="text-sm text-slate-500">
+                              Комментарий: {match.comment}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="md:max-w-[320px]">
+                          {actions.length === 0 ? (
+                            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                              Для текущего статуса больше нет доступных действий.
+                            </div>
+                          ) : (
+                            <div className="grid gap-2">
+                              {actions.map((action) => (
+                                <button
+                                  key={action.key}
+                                  type="button"
+                                  disabled={busyMatchId === match.id}
+                                  onClick={() =>
+                                    void runMatchAction(
+                                      match.id,
+                                      action.endpoint,
+                                      action.successText
+                                    )
+                                  }
+                                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {busyMatchId === match.id ? "Сохраняем..." : action.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>
