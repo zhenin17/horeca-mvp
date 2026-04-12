@@ -5,6 +5,7 @@ from app.api.candidates import router as candidates_router
 from app.api.employers import router as employers_router
 from app.api.funnel_events import router as funnel_events_router
 from app.api.shortlists import router as shortlists_router
+from app.api.telegram import router as telegram_router
 from app.api.vacancies import router as vacancies_router
 from app.api.vacancy_candidate_matches import router as matches_router
 from app.core.config import settings
@@ -15,12 +16,12 @@ app = FastAPI(title=settings.app_name)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3001",
-    "http://localhost:3010",
-    "http://127.0.0.1:3010",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3010",
+        "http://127.0.0.1:3010",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -33,6 +34,7 @@ app.include_router(vacancies_router)
 app.include_router(funnel_events_router)
 app.include_router(matches_router)
 app.include_router(shortlists_router)
+app.include_router(telegram_router)
 
 
 @app.get("/")
