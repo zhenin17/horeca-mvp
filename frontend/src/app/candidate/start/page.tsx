@@ -43,6 +43,28 @@ function detectTelegramWebApp() {
   return Boolean(w.Telegram?.WebApp?.initData?.trim());
 }
 
+function getCurrentCandidateId() {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+
+  const possibleKeys = [
+    "hubsty_candidate_id",
+    "candidateId",
+    "selectedCandidateId",
+  ];
+
+  for (const key of possibleKeys) {
+    const value = window.localStorage.getItem(key);
+    const id = Number(value);
+    if (Number.isFinite(id) && id > 0) {
+      return id;
+    }
+  }
+
+  return 1;
+}
+
 export default function CandidateStartPage() {
   const [candidate, setCandidate] = useState<CandidateProfileStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +74,9 @@ export default function CandidateStartPage() {
   useEffect(() => {
     setIsTelegram(detectTelegramWebApp());
 
-    apiFetch<CandidateProfileStatus>("/candidates/1")
+    const candidateId = getCurrentCandidateId();
+
+    apiFetch<CandidateProfileStatus>(`/candidates/${candidateId}`)
       .then((data) => {
         setCandidate(data);
         setErrorText("");

@@ -102,6 +102,28 @@ function detectTelegramWebApp() {
   return Boolean(w.Telegram?.WebApp?.initData?.trim());
 }
 
+function getCurrentCandidateId() {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+
+  const possibleKeys = [
+    "hubsty_candidate_id",
+    "candidateId",
+    "selectedCandidateId",
+  ];
+
+  for (const key of possibleKeys) {
+    const value = window.localStorage.getItem(key);
+    const id = Number(value);
+    if (Number.isFinite(id) && id > 0) {
+      return id;
+    }
+  }
+
+  return 1;
+}
+
 export default function CandidateProfilePage() {
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
@@ -114,9 +136,11 @@ export default function CandidateProfilePage() {
     try {
       setMessage("");
 
+      const candidateId = getCurrentCandidateId();
+
       const [dashboardData, candidateData] = await Promise.all([
-        apiFetch<CandidateDashboard>("/candidates/1/dashboard"),
-        apiFetch<CandidateProfile>("/candidates/1"),
+        apiFetch<CandidateDashboard>(`/candidates/${candidateId}/dashboard`),
+        apiFetch<CandidateProfile>(`/candidates/${candidateId}`),
       ]);
 
       setDashboard(dashboardData);
@@ -145,7 +169,7 @@ export default function CandidateProfilePage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/candidates/1", {
+      const response = await fetch(`/api/candidates/${candidate.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

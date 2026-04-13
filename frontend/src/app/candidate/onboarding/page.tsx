@@ -55,6 +55,28 @@ function detectTelegramWebApp() {
   return Boolean(w.Telegram?.WebApp?.initData?.trim());
 }
 
+function getCurrentCandidateId() {
+  if (typeof window === "undefined") {
+    return 1;
+  }
+
+  const possibleKeys = [
+    "hubsty_candidate_id",
+    "candidateId",
+    "selectedCandidateId",
+  ];
+
+  for (const key of possibleKeys) {
+    const value = window.localStorage.getItem(key);
+    const id = Number(value);
+    if (Number.isFinite(id) && id > 0) {
+      return id;
+    }
+  }
+
+  return 1;
+}
+
 function formatReadyToStartPreview(value: string) {
   switch (value) {
     case "today":
@@ -91,7 +113,9 @@ export default function CandidateOnboardingPage() {
         setMessage("");
         setMessageType("");
 
-        const response = await fetch("/api/candidates/1", {
+        const candidateId = getCurrentCandidateId();
+
+        const response = await fetch(`/api/candidates/${candidateId}`, {
           cache: "no-store",
         });
 
@@ -232,7 +256,9 @@ export default function CandidateOnboardingPage() {
     clearMessage();
 
     try {
-      const response = await fetch("/api/candidates/1", {
+      const candidateId = getCurrentCandidateId();
+
+      const response = await fetch(`/api/candidates/${candidateId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
