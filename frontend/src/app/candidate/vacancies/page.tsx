@@ -53,6 +53,17 @@ type VacancyCardItem = VacancyItem & {
 
 type VacancyFilter = "all" | "fresh" | "applied";
 
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        initData?: string;
+        initDataUnsafe?: Record<string, unknown>;
+      };
+    };
+  }
+}
+
 async function readJsonSafe<T>(response: Response): Promise<T | null> {
   const text = await response.text();
 
@@ -89,8 +100,42 @@ function getCurrentCandidateId() {
   return 1;
 }
 
+function isTelegramMiniApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean(window.Telegram?.WebApp);
+}
+
 function formatIncomeText(value?: string | null) {
   return value?.trim() ? value : "Не указано";
+}
+
+function formatReadyToStart(value?: string | null) {
+  if (!value?.trim()) {
+    return "Не указано";
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "today":
+    case "сегодня":
+      return "Сегодня";
+    case "tomorrow":
+    case "завтра":
+      return "Завтра";
+    case "3days":
+    case "3_days":
+    case "3 дня":
+      return "В течение 3 дней";
+    case "week":
+    case "неделя":
+      return "В течение недели";
+    default:
+      return value;
+  }
 }
 
 function formatMatchStatus(status: string) {
@@ -173,7 +218,7 @@ function vacancyFilterLabel(filter: VacancyFilter) {
     case "all":
       return "Все";
     case "fresh":
-      return "Новые для меня";
+      return "Новые";
     case "applied":
       return "С откликом";
     default:
@@ -181,7 +226,10 @@ function vacancyFilterLabel(filter: VacancyFilter) {
   }
 }
 
-function buildFitExplanation(candidate: CandidateItem, vacancy: VacancyItem): FitExplanation {
+function buildFitExplanation(
+  candidate: CandidateItem,
+  vacancy: VacancyItem
+): FitExplanation {
   const candidateRole = candidate.primary_role.trim().toLowerCase();
   const vacancyRole = vacancy.role.trim().toLowerCase();
 
@@ -189,16 +237,16 @@ function buildFitExplanation(candidate: CandidateItem, vacancy: VacancyItem): Fi
   let title = "Подходит по базовым параметрам";
 
   if (candidateRole === vacancyRole) {
-    title = "Главное: роль полностью совпадает";
+    title = "Роль полностью совпадает";
   } else if (
     candidateRole.includes(vacancyRole) ||
     vacancyRole.includes(candidateRole)
   ) {
-    title = "Главное: роль близка к вашему профилю";
+    title = "Роль близка вашему профилю";
   }
 
   if (candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()) {
-    reasons.push("Вакансия в вашем городе");
+    reasons.push("Ваш город");
   }
 
   if (
@@ -206,29 +254,45 @@ function buildFitExplanation(candidate: CandidateItem, vacancy: VacancyItem): Fi
     vacancy.district &&
     candidate.district.trim().toLowerCase() === vacancy.district.trim().toLowerCase()
   ) {
-    reasons.push("Район совпадает");
+    reasons.push("Ваш район");
   }
 
   if (candidate.ready_to_start?.trim()) {
-    reasons.push(`Вы готовы выйти: ${candidate.ready_to_start}`);
+    reasons.push(`Можно выйти: ${formatReadyToStart(candidate.ready_to_start)}`);
   }
 
   if (candidate.expected_income && vacancy.salary_text) {
-    reasons.push("Доход выглядит близким к вашим ожиданиям");
+    reasons.push("Доход близок ожиданиям");
   }
 
   if (candidate.horeca_experience_months > 0) {
-    reasons.push("У вас уже есть опыт в HoReCa");
+    reasons.push("Есть опыт в HoReCa");
   }
 
   if (reasons.length === 0) {
-    reasons.push("Есть базовое совпадение по вашему профилю");
+    reasons.push("Есть базовое совпадение");
   }
 
   return {
     title,
-    reasons: reasons.slice(0, 2),
+    reasons: reasons.slice(0, 3),
   };
+}
+
+function getVacancyStatusTone(match?: MatchItem | null) {
+  if (!match) {
+    return "bg-slate-100 text-slate-700";
+  }
+
+  if (["invited", "interviewed", "offered", "hired"].includes(match.status)) {
+    return "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100";
+  }
+
+  if (["rejected", "no_show"].includes(match.status)) {
+    return "bg-slate-100 text-slate-600";
+  }
+
+  return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
 }
 
 export default function CandidateVacanciesPage() {
@@ -237,6 +301,8 @@ export default function CandidateVacanciesPage() {
   const [candidate, setCandidate] = useState<CandidateItem | null>(null);
   const [vacancies, setVacancies] = useState<VacancyCardItem[]>([]);
   const [filter, setFilter] = useState<VacancyFilter>("all");
+  const [isTelegram, setIsTelegram] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
   async function loadData() {
     try {
@@ -245,11 +311,14 @@ export default function CandidateVacanciesPage() {
 
       const candidateId = getCurrentCandidateId();
 
-      const [candidateResponse, vacanciesResponse, matchesResponse] = await Promise.all([
-        fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
-        fetch("/api/vacancies/", { cache: "no-store" }),
-        fetch(`/api/matches/?candidate_id=${candidateId}`, { cache: "no-store" }),
-      ]);
+      const [candidateResponse, vacanciesResponse, matchesResponse] =
+        await Promise.all([
+          fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
+          fetch("/api/vacancies/", { cache: "no-store" }),
+          fetch(`/api/matches/?candidate_id=${candidateId}`, {
+            cache: "no-store",
+          }),
+        ]);
 
       if (!candidateResponse.ok) {
         throw new Error("Не удалось загрузить кандидата");
@@ -312,6 +381,7 @@ export default function CandidateVacanciesPage() {
   }
 
   useEffect(() => {
+    setIsTelegram(isTelegramMiniApp());
     void loadData();
   }, []);
 
@@ -340,13 +410,19 @@ export default function CandidateVacanciesPage() {
   }, [vacancies, filter]);
 
   if (loading) {
-    return <main className="px-4 py-6">Загрузка вакансий...</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка вакансий...
+        </div>
+      </main>
+    );
   }
 
   if (errorText && !candidate) {
     return (
       <main className="px-4 py-6">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
         </div>
       </main>
@@ -354,87 +430,137 @@ export default function CandidateVacanciesPage() {
   }
 
   return (
-    <main className="space-y-6 px-4 py-6">
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Кандидат</p>
-            <h1 className="mt-2 text-2xl font-semibold">Подходящие вакансии</h1>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600">
-              Здесь собраны вакансии, которые подходят вам по роли, локации и
-              готовности выйти. Если вы уже откликались, это видно сразу.
-            </p>
-            {candidate ? (
-              <div className="mt-3 text-sm text-slate-500">
-                {candidate.full_name} · {candidate.primary_role}
-              </div>
-            ) : null}
-          </div>
+    <main className={`px-4 py-6 ${isTelegram ? "space-y-4" : "space-y-6"}`}>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm text-slate-500">
+                {isTelegram ? "Для вас" : "Кандидат"}
+              </p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+                Подходящие вакансии
+              </h1>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                void loadData();
-              }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              Обновить
-            </button>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+                {isTelegram
+                  ? "Собрали вакансии по вашей роли, району и готовности выйти."
+                  : "Здесь собраны вакансии, которые подходят вам по роли, локации и готовности выйти. Если вы уже откликались, это видно сразу."}
+              </p>
 
-            <Link
-              href="/candidate/matches"
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              Мои отклики
-            </Link>
+              {candidate ? (
+                <div className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
+                  {candidate.full_name} · {candidate.primary_role}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {isTelegram ? (
+                <button
+                  type="button"
+                  onClick={() => setShowFilters((prev) => !prev)}
+                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Фильтр
+                </button>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => {
+                  void loadData();
+                }}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Обновить
+              </button>
+
+              <Link
+                href="/candidate/matches"
+                className="rounded-2xl bg-slate-900 px-4 py-2 text-center text-sm font-medium text-white hover:opacity-95"
+              >
+                Мои отклики
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {errorText ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
         </div>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">Всего вакансий</div>
-          <div className="mt-2 text-2xl font-semibold">{stats.total}</div>
-        </div>
+      {!isTelegram ? (
+        <section className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">Всего вакансий</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">
+              {stats.total}
+            </div>
+          </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">Новые для вас</div>
-          <div className="mt-2 text-2xl font-semibold">{stats.fresh}</div>
-        </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">Новые для вас</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">
+              {stats.fresh}
+            </div>
+          </div>
 
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">С откликом</div>
-          <div className="mt-2 text-2xl font-semibold">{stats.applied}</div>
-        </div>
-      </section>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-sm text-slate-500">С откликом</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-900">
+              {stats.applied}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="flex gap-2 overflow-x-auto pb-1">
+          <div className="min-w-[150px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs text-slate-500">Всего</div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              {stats.total}
+            </div>
+          </div>
+          <div className="min-w-[150px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs text-slate-500">Новые</div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              {stats.fresh}
+            </div>
+          </div>
+          <div className="min-w-[150px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="text-xs text-slate-500">С откликом</div>
+            <div className="mt-2 text-xl font-semibold text-slate-900">
+              {stats.applied}
+            </div>
+          </div>
+        </section>
+      )}
 
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          {(["all", "fresh", "applied"] as VacancyFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setFilter(item)}
-              className={`rounded-xl border px-3 py-2 text-sm ${
-                filter === item
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-300 hover:bg-slate-50"
-              }`}
-            >
-              {vacancyFilterLabel(item)}
-            </button>
-          ))}
-        </div>
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        {(!isTelegram || showFilters) && (
+          <div className="flex flex-wrap gap-2">
+            {(["all", "fresh", "applied"] as VacancyFilter[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setFilter(item)}
+                className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                  filter === item
+                    ? "bg-violet-600 text-white"
+                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {vacancyFilterLabel(item)}
+              </button>
+            ))}
+          </div>
+        )}
 
         {filteredVacancies.length === 0 ? (
-          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
             По выбранному фильтру вакансий пока нет.
           </div>
         ) : (
@@ -442,68 +568,76 @@ export default function CandidateVacanciesPage() {
             {filteredVacancies.map((vacancy) => (
               <div
                 key={vacancy.id}
-                className="rounded-xl border border-slate-200 p-4"
+                className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
               >
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-2">
-                    <div className="font-medium">
-                      {vacancy.role} · {vacancy.venue_name}
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <div className="text-lg font-semibold text-slate-900">
+                        {vacancy.role}
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        {vacancy.venue_name}
+                      </div>
                     </div>
 
-                    <div className="text-sm text-slate-600">
-                      {vacancy.city}
-                      {vacancy.district ? `, ${vacancy.district}` : ""}
+                    <div className="flex flex-wrap gap-2 text-sm text-slate-600">
+                      <span className="rounded-full bg-slate-100 px-3 py-1">
+                        {formatIncomeText(vacancy.salary_text)}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1">
+                        {vacancy.city}
+                        {vacancy.district ? `, ${vacancy.district}` : ""}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1">
+                        {formatReadyToStart(vacancy.needed_start)}
+                      </span>
                     </div>
 
-                    <div className="text-sm text-slate-500">
-                      Доход: {formatIncomeText(vacancy.salary_text)}
-                    </div>
-
-                    <div className="text-sm text-slate-500">
-                      График: {vacancy.schedule_text || "Не указан"}
-                    </div>
-
-                    <div className="text-sm text-slate-500">
-                      Нужен выход: {vacancy.needed_start || "Не указано"}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100">
                         {fitScoreLabel(vacancy.fitScore)} · {vacancy.fitScore}
                       </span>
 
-                      {vacancy.match ? (
-                        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs text-emerald-800">
-                          {formatMatchStatus(vacancy.match.status)}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs">
-                          Еще без отклика
-                        </span>
-                      )}
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${getVacancyStatusTone(
+                          vacancy.match
+                        )}`}
+                      >
+                        {vacancy.match
+                          ? formatMatchStatus(vacancy.match.status)
+                          : "Еще без отклика"}
+                      </span>
                     </div>
 
-                    <div className="pt-2">
+                    <div className="rounded-2xl bg-slate-50 p-3">
                       <div className="text-sm font-medium text-slate-900">
                         {vacancy.fitExplanation.title}
                       </div>
+
                       <div className="mt-2 flex flex-wrap gap-2">
                         {vacancy.fitExplanation.reasons.map((reason) => (
                           <span
                             key={reason}
-                            className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700"
+                            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
                           >
                             {reason}
                           </span>
                         ))}
                       </div>
                     </div>
+
+                    {!isTelegram ? (
+                      <div className="text-sm text-slate-500">
+                        График: {vacancy.schedule_text || "Не указан"}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="flex min-w-[220px] flex-col gap-2">
                     <Link
                       href={`/candidate/vacancies/${vacancy.id}`}
-                      className="rounded-xl border border-slate-300 px-4 py-2 text-center text-sm font-medium hover:bg-slate-50"
+                      className="rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white hover:opacity-95"
                     >
                       Открыть вакансию
                     </Link>
@@ -511,11 +645,15 @@ export default function CandidateVacanciesPage() {
                     {vacancy.match ? (
                       <Link
                         href="/candidate/matches"
-                        className="rounded-xl border border-slate-300 px-4 py-2 text-center text-sm font-medium hover:bg-slate-50"
+                        className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
                       >
-                        Смотреть мой статус
+                        Смотреть статус
                       </Link>
-                    ) : null}
+                    ) : (
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">
+                        Отклик можно отправить внутри вакансии
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

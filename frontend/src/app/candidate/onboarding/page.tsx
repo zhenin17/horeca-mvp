@@ -15,6 +15,18 @@ type CandidateForm = {
   expected_income: string;
 };
 
+type LoadCandidateResponse = {
+  full_name: string;
+  phone: string;
+  telegram_username?: string | null;
+  city: string;
+  district?: string | null;
+  primary_role: string;
+  horeca_experience_months: number;
+  ready_to_start: string;
+  expected_income?: string | null;
+};
+
 const initialForm: CandidateForm = {
   full_name: "",
   phone: "",
@@ -33,11 +45,13 @@ export default function CandidateOnboardingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"error" | "success" | "">("");
 
   useEffect(() => {
     async function loadCandidate() {
       try {
         setMessage("");
+        setMessageType("");
 
         const response = await fetch("/api/candidates/1", {
           cache: "no-store",
@@ -47,17 +61,7 @@ export default function CandidateOnboardingPage() {
           throw new Error("Не удалось загрузить анкету кандидата");
         }
 
-        const data = (await response.json()) as {
-          full_name: string;
-          phone: string;
-          telegram_username?: string | null;
-          city: string;
-          district?: string | null;
-          primary_role: string;
-          horeca_experience_months: number;
-          ready_to_start: string;
-          expected_income?: string | null;
-        };
+        const data = (await response.json()) as LoadCandidateResponse;
 
         setForm({
           full_name: data.full_name || "",
@@ -73,12 +77,13 @@ export default function CandidateOnboardingPage() {
       } catch (error) {
         console.error(error);
         setMessage("Не удалось загрузить анкету");
+        setMessageType("error");
       } finally {
         setLoading(false);
       }
     }
 
-    loadCandidate();
+    void loadCandidate();
   }, []);
 
   function updateField<K extends keyof CandidateForm>(key: K, value: CandidateForm[K]) {
@@ -99,59 +104,91 @@ export default function CandidateOnboardingPage() {
     return titles[step] || "Анкета";
   }, [step]);
 
+  const stepDescription = useMemo(() => {
+    const descriptions: Record<number, string> = {
+      1: "Начнем с базовой информации, чтобы профиль выглядел понятно и аккуратно.",
+      2: "Теперь укажем, кем вы работаете и какой у вас опыт.",
+      3: "Осталось понять, когда вы готовы выйти и на какой доход рассчитываете.",
+      4: "Проверьте анкету перед сохранением. После этого можно идти смотреть вакансии.",
+    };
+
+    return descriptions[step] || "";
+  }, [step]);
+
+  const progressPercent = useMemo(() => {
+    return (step / 4) * 100;
+  }, [step]);
+
+  function setError(text: string) {
+    setMessage(text);
+    setMessageType("error");
+  }
+
+  function clearMessage() {
+    setMessage("");
+    setMessageType("");
+  }
+
   function validateStep(currentStep: number): boolean {
     if (currentStep === 1) {
       if (!form.full_name.trim()) {
-        setMessage("Укажи имя и фамилию");
+        setError("Укажите имя и фамилию");
         return false;
       }
       if (!form.phone.trim()) {
-        setMessage("Укажи телефон");
+        setError("Укажите телефон");
         return false;
       }
       if (!form.city.trim()) {
-        setMessage("Укажи город");
+        setError("Укажите город");
         return false;
       }
     }
 
     if (currentStep === 2) {
       if (!form.primary_role.trim()) {
-        setMessage("Укажи основную роль");
+        setError("Укажите основную роль");
         return false;
       }
-      if (Number.isNaN(Number(form.horeca_experience_months))) {
-        setMessage("Опыт должен быть числом");
+
+      const months = Number(form.horeca_experience_months);
+      if (!Number.isFinite(months) || months < 0) {
+        setError("Опыт должен быть числом от 0 и больше");
         return false;
       }
     }
 
     if (currentStep === 3) {
       if (!form.ready_to_start.trim()) {
-        setMessage("Укажи готовность выйти");
+        setError("Укажите, когда готовы выйти");
         return false;
       }
     }
 
-    setMessage("");
+    clearMessage();
     return true;
   }
 
   function nextStep() {
-    if (!validateStep(step)) return;
+    if (!validateStep(step)) {
+      return;
+    }
+
     setStep((prev) => Math.min(prev + 1, 4));
   }
 
   function prevStep() {
-    setMessage("");
+    clearMessage();
     setStep((prev) => Math.max(prev - 1, 1));
   }
 
   async function saveCandidate() {
-    if (!validateStep(3)) return;
+    if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
+      return;
+    }
 
     setSaving(true);
-    setMessage("");
+    clearMessage();
 
     try {
       const response = await fetch("/api/candidates/1", {
@@ -178,15 +215,16 @@ export default function CandidateOnboardingPage() {
         throw new Error(data.detail || "Не удалось сохранить анкету");
       }
 
-      setMessage("Анкета сохранена");
+      setMessage("Анкета сохранена. Переходим к вакансиям.");
+      setMessageType("success");
       window.location.href = "/candidate/vacancies";
     } catch (error) {
       console.error(error);
 
       if (error instanceof Error) {
-        setMessage(error.message);
+        setError(error.message);
       } else {
-        setMessage("Не удалось сохранить анкету");
+        setError("Не удалось сохранить анкету");
       }
     } finally {
       setSaving(false);
@@ -200,76 +238,103 @@ export default function CandidateOnboardingPage() {
   return (
     <main className="space-y-6 px-4 py-6">
       <div>
-        <Link href="/candidate/profile" className="text-sm text-slate-600 underline">
-          ← Назад к профилю
+        <Link href="/candidate/start" className="text-sm text-slate-600 underline">
+          ← Назад
         </Link>
       </div>
 
       {message ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+        <div
+          className={`rounded-2xl border p-4 text-sm ${
+            messageType === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
           {message}
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-500">Анкета кандидата</p>
+          <div className="max-w-2xl">
+            <p className="text-sm font-medium text-slate-500">Анкета кандидата</p>
             <h1 className="mt-1 text-2xl font-semibold">{stepTitle}</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{stepDescription}</p>
           </div>
-          <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+
+          <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
             Шаг {step} из 4
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <div className="h-2 w-full rounded-full bg-slate-100">
+            <div
+              className="h-2 rounded-full bg-slate-900 transition-all"
+              style={{ width: `${progressPercent}%` }}
+            />
           </div>
         </div>
 
         {step === 1 ? (
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm text-slate-600">Имя и фамилия</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Имя и фамилия
+              </label>
               <input
                 value={form.full_name}
                 onChange={(e) => updateField("full_name", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="Например, Иван Иванов"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Телефон</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Телефон
+              </label>
               <input
                 value={form.phone}
                 onChange={(e) => updateField("phone", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="+79990000001"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Telegram</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Telegram
+              </label>
               <input
                 value={form.telegram_username}
                 onChange={(e) => updateField("telegram_username", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="ivan_test"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Город</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Город
+              </label>
               <input
                 value={form.city}
                 onChange={(e) => updateField("city", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="Санкт-Петербург"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Район</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Район
+              </label>
               <input
                 value={form.district}
                 onChange={(e) => updateField("district", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="Центральный"
               />
             </div>
@@ -279,21 +344,25 @@ export default function CandidateOnboardingPage() {
         {step === 2 ? (
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Основная роль</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Основная роль
+              </label>
               <input
                 value={form.primary_role}
                 onChange={(e) => updateField("primary_role", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="Бариста"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Опыт в HoReCa, мес.</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Опыт в HoReCa, месяцев
+              </label>
               <input
                 value={form.horeca_experience_months}
                 onChange={(e) => updateField("horeca_experience_months", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
                 placeholder="12"
                 inputMode="numeric"
               />
@@ -304,11 +373,13 @@ export default function CandidateOnboardingPage() {
         {step === 3 ? (
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Когда готов выйти</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Когда готовы выйти
+              </label>
               <select
                 value={form.ready_to_start}
                 onChange={(e) => updateField("ready_to_start", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
               >
                 <option value="today">Сегодня</option>
                 <option value="tomorrow">Завтра</option>
@@ -318,36 +389,86 @@ export default function CandidateOnboardingPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-600">Желаемый доход</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Желаемый доход
+              </label>
               <input
                 value={form.expected_income}
                 onChange={(e) => updateField("expected_income", e.target.value)}
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                placeholder="4500 shift"
+                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                placeholder="4500 за смену"
               />
             </div>
           </div>
         ) : null}
 
         {step === 4 ? (
-          <div className="mt-6 space-y-3 text-sm text-slate-700">
-            <div>Имя: {form.full_name || "-"}</div>
-            <div>Телефон: {form.phone || "-"}</div>
-            <div>Telegram: {form.telegram_username || "-"}</div>
-            <div>Город: {form.city || "-"}</div>
-            <div>Район: {form.district || "-"}</div>
-            <div>Роль: {form.primary_role || "-"}</div>
-            <div>Опыт: {form.horeca_experience_months || "0"} мес.</div>
-            <div>Готовность выйти: {form.ready_to_start || "-"}</div>
-            <div>Желаемый доход: {form.expected_income || "-"}</div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Имя и фамилия</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.full_name || "-"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Телефон</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.phone || "-"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Telegram</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.telegram_username || "-"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Город и район</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.city || "-"}
+                {form.district ? `, ${form.district}` : ""}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Роль</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.primary_role || "-"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Опыт</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.horeca_experience_months || "0"} мес.
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Готовность выйти</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.ready_to_start || "-"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Желаемый доход</div>
+              <div className="mt-1 text-sm font-medium text-slate-900">
+                {form.expected_income || "-"}
+              </div>
+            </div>
           </div>
         ) : null}
 
         <div className="mt-6 flex flex-wrap gap-3">
           {step > 1 ? (
             <button
+              type="button"
               onClick={prevStep}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+              className="rounded-2xl border border-slate-300 px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Назад
             </button>
@@ -355,18 +476,20 @@ export default function CandidateOnboardingPage() {
 
           {step < 4 ? (
             <button
+              type="button"
               onClick={nextStep}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
             >
               Дальше
             </button>
           ) : (
             <button
+              type="button"
               onClick={saveCandidate}
               disabled={saving}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? "Сохранение..." : "Сохранить анкету"}
+              {saving ? "Сохраняем..." : "Сохранить анкету"}
             </button>
           )}
         </div>
