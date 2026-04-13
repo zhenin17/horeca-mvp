@@ -53,7 +53,6 @@ type VacancyCardItem = VacancyItem & {
 
 type VacancyFilter = "all" | "fresh" | "applied";
 
-
 async function readJsonSafe<T>(response: Response): Promise<T | null> {
   const text = await response.text();
 
@@ -168,14 +167,17 @@ function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
     score += 15;
   }
 
-  if (candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()) {
+  if (
+    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+  ) {
     score += 10;
   }
 
   if (
     candidate.district &&
     vacancy.district &&
-    candidate.district.trim().toLowerCase() === vacancy.district.trim().toLowerCase()
+    candidate.district.trim().toLowerCase() ===
+      vacancy.district.trim().toLowerCase()
   ) {
     score += 10;
   }
@@ -235,14 +237,17 @@ function buildFitExplanation(
     title = "Роль близка вашему профилю";
   }
 
-  if (candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()) {
+  if (
+    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+  ) {
     reasons.push("Ваш город");
   }
 
   if (
     candidate.district &&
     vacancy.district &&
-    candidate.district.trim().toLowerCase() === vacancy.district.trim().toLowerCase()
+    candidate.district.trim().toLowerCase() ===
+      vacancy.district.trim().toLowerCase()
   ) {
     reasons.push("Ваш район");
   }
@@ -425,14 +430,21 @@ export default function CandidateVacanciesPage() {
         <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="text-sm text-slate-500">
+              <p
+                className={`${
+                  isTelegram
+                    ? "text-xs font-semibold uppercase tracking-[0.16em] text-violet-600"
+                    : "text-sm text-slate-500"
+                }`}
+              >
                 {isTelegram ? "Для вас" : "Кандидат"}
               </p>
+
               <h1 className="mt-2 text-2xl font-semibold text-slate-900">
                 Подходящие вакансии
               </h1>
 
-              <p className="mt-2 max-w-2xl text-sm text-slate-600">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                 {isTelegram
                   ? "Собрали вакансии по вашей роли, району и готовности выйти."
                   : "Здесь собраны вакансии, которые подходят вам по роли, локации и готовности выйти. Если вы уже откликались, это видно сразу."}
@@ -440,7 +452,7 @@ export default function CandidateVacanciesPage() {
 
               {candidate ? (
                 <div className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
-                  {candidate.full_name} · {candidate.primary_role}
+                  {candidate.primary_role}
                 </div>
               ) : null}
             </div>
@@ -452,7 +464,7 @@ export default function CandidateVacanciesPage() {
                   onClick={() => setShowFilters((prev) => !prev)}
                   className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
                 >
-                  Фильтр
+                  {showFilters ? "Скрыть фильтры" : "Фильтры"}
                 </button>
               ) : null}
 
@@ -483,51 +495,32 @@ export default function CandidateVacanciesPage() {
         </div>
       ) : null}
 
-      {!isTelegram ? (
-        <section className="grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Всего вакансий</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.total}
-            </div>
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">
+            {isTelegram ? "Всего" : "Всего вакансий"}
           </div>
+          <div className="mt-2 text-xl font-semibold text-slate-900">
+            {stats.total}
+          </div>
+        </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Новые для вас</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.fresh}
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">
+            {isTelegram ? "Новые" : "Новые для вас"}
           </div>
+          <div className="mt-2 text-xl font-semibold text-slate-900">
+            {stats.fresh}
+          </div>
+        </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">С откликом</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.applied}
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm col-span-2 sm:col-span-1">
+          <div className="text-xs text-slate-500">С откликом</div>
+          <div className="mt-2 text-xl font-semibold text-slate-900">
+            {stats.applied}
           </div>
-        </section>
-      ) : (
-        <section className="flex gap-2 overflow-x-auto pb-1">
-          <div className="min-w-[150px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-slate-500">Всего</div>
-            <div className="mt-2 text-xl font-semibold text-slate-900">
-              {stats.total}
-            </div>
-          </div>
-          <div className="min-w-[150px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-slate-500">Новые</div>
-            <div className="mt-2 text-xl font-semibold text-slate-900">
-              {stats.fresh}
-            </div>
-          </div>
-          <div className="min-w-[150px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-xs text-slate-500">С откликом</div>
-            <div className="mt-2 text-xl font-semibold text-slate-900">
-              {stats.applied}
-            </div>
-          </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         {(!isTelegram || showFilters) && (
@@ -624,7 +617,7 @@ export default function CandidateVacanciesPage() {
                     ) : null}
                   </div>
 
-                  <div className="flex min-w-[220px] flex-col gap-2">
+                  <div className="flex w-full flex-col gap-2 lg:w-[220px] lg:min-w-[220px]">
                     <Link
                       href={`/candidate/vacancies/${vacancy.id}`}
                       className="rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white hover:opacity-95"

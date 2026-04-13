@@ -12,8 +12,8 @@ function topNavClass(isActive: boolean) {
 
 function bottomNavClass(isActive: boolean) {
   return isActive
-    ? "flex min-w-0 flex-1 items-center justify-center rounded-2xl bg-slate-900 px-3 py-3 text-sm font-semibold text-white shadow-sm"
-    : "flex min-w-0 flex-1 items-center justify-center rounded-2xl bg-white px-3 py-3 text-sm font-medium text-slate-600";
+    ? "flex h-12 min-w-0 flex-1 items-center justify-center rounded-2xl bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm"
+    : "flex h-12 min-w-0 flex-1 items-center justify-center rounded-2xl bg-white px-3 text-sm font-medium text-slate-600";
 }
 
 function detectTelegramWebApp() {
@@ -25,19 +25,11 @@ function detectTelegramWebApp() {
     Telegram?: {
       WebApp?: {
         initData?: string;
-        initDataUnsafe?: unknown;
-        platform?: string;
       };
     };
   };
 
-  const webApp = w.Telegram?.WebApp;
-
-  if (!webApp) {
-    return false;
-  }
-
-  return Boolean(webApp.initData && webApp.initData.trim().length > 0);
+  return Boolean(w.Telegram?.WebApp?.initData?.trim());
 }
 
 export default function CandidateLayout({
@@ -51,8 +43,8 @@ export default function CandidateLayout({
   const [isTelegram, setIsTelegram] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     setIsTelegram(detectTelegramWebApp());
+    setMounted(true);
   }, []);
 
   const isStart = pathname === "/candidate/start";
@@ -61,21 +53,27 @@ export default function CandidateLayout({
   const isMatches = pathname.startsWith("/candidate/matches");
   const isProfile = pathname.startsWith("/candidate/profile");
 
-  const showTelegramUi = mounted && isTelegram;
+  if (!mounted) {
+    return (
+      <div className="overflow-x-hidden">
+        <div className="overflow-x-hidden">{children}</div>
+      </div>
+    );
+  }
+
+  const showTelegramUi = isTelegram;
 
   return (
-    <div className={showTelegramUi ? "pb-24" : ""}>
+    <div className={showTelegramUi ? "overflow-x-hidden pb-28" : "overflow-x-hidden"}>
       {!showTelegramUi ? (
         <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="px-4 py-3">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Кандидат
-                </div>
-                <div className="mt-1 text-sm text-slate-600">
-                  Понятный путь: анкета → вакансии → отклики
-                </div>
+            <div className="mb-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Кандидат
+              </div>
+              <div className="mt-1 text-sm text-slate-600">
+                Понятный путь: анкета → вакансии → отклики
               </div>
             </div>
 
@@ -83,32 +81,16 @@ export default function CandidateLayout({
               <Link href="/candidate/start" className={topNavClass(isStart)}>
                 Старт
               </Link>
-
-              <Link
-                href="/candidate/onboarding"
-                className={topNavClass(isOnboarding)}
-              >
+              <Link href="/candidate/onboarding" className={topNavClass(isOnboarding)}>
                 Анкета
               </Link>
-
-              <Link
-                href="/candidate/vacancies"
-                className={topNavClass(isVacancies)}
-              >
+              <Link href="/candidate/vacancies" className={topNavClass(isVacancies)}>
                 Вакансии
               </Link>
-
-              <Link
-                href="/candidate/matches"
-                className={topNavClass(isMatches)}
-              >
+              <Link href="/candidate/matches" className={topNavClass(isMatches)}>
                 Отклики
               </Link>
-
-              <Link
-                href="/candidate/profile"
-                className={topNavClass(isProfile)}
-              >
+              <Link href="/candidate/profile" className={topNavClass(isProfile)}>
                 Профиль
               </Link>
             </nav>
@@ -127,36 +109,29 @@ export default function CandidateLayout({
         </div>
       )}
 
-      {children}
+      <div className="overflow-x-hidden">{children}</div>
 
       {showTelegramUi ? (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-3 pt-3 backdrop-blur [padding-bottom:calc(env(safe-area-inset-bottom)+12px)]">
-          <nav className="flex items-center gap-2">
-            <Link href="/candidate/start" className={bottomNavClass(isStart)}>
-              Старт
-            </Link>
-
-            <Link
-              href="/candidate/vacancies"
-              className={bottomNavClass(isVacancies)}
-            >
-              Вакансии
-            </Link>
-
-            <Link
-              href="/candidate/matches"
-              className={bottomNavClass(isMatches)}
-            >
-              Отклики
-            </Link>
-
-            <Link
-              href="/candidate/profile"
-              className={bottomNavClass(isProfile || isOnboarding)}
-            >
-              Профиль
-            </Link>
-          </nav>
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto w-full max-w-md px-3 pt-3 [padding-bottom:calc(env(safe-area-inset-bottom)+12px)]">
+            <nav className="flex items-center gap-2">
+              <Link href="/candidate/start" className={bottomNavClass(isStart)}>
+                Старт
+              </Link>
+              <Link href="/candidate/vacancies" className={bottomNavClass(isVacancies)}>
+                Вакансии
+              </Link>
+              <Link href="/candidate/matches" className={bottomNavClass(isMatches)}>
+                Отклики
+              </Link>
+              <Link
+                href="/candidate/profile"
+                className={bottomNavClass(isProfile || isOnboarding)}
+              >
+                Профиль
+              </Link>
+            </nav>
+          </div>
         </div>
       ) : null}
     </div>

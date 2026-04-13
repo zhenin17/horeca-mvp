@@ -218,18 +218,18 @@ function cardAccentClasses(status: string) {
 
 function statusPillClasses(status: string) {
   if (status === "invited" || status === "offered" || status === "hired") {
-    return "bg-emerald-100 text-emerald-900 border border-emerald-200";
+    return "border border-emerald-200 bg-emerald-100 text-emerald-900";
   }
 
   if (status === "viewed") {
-    return "bg-violet-100 text-violet-900 border border-violet-200";
+    return "border border-violet-200 bg-violet-100 text-violet-900";
   }
 
   if (status === "rejected" || status === "no_show") {
-    return "bg-slate-100 text-slate-700 border border-slate-200";
+    return "border border-slate-200 bg-slate-100 text-slate-700";
   }
 
-  return "bg-slate-100 text-slate-800 border border-slate-200";
+  return "border border-slate-200 bg-slate-100 text-slate-800";
 }
 
 function scoreLabel(score: number) {
@@ -334,9 +334,8 @@ export default function CandidateMatchesPage() {
   const stats = useMemo(() => {
     return {
       total: matches.length,
-      unseen: matches.filter((item) =>
-        ["shortlist", "sent"].includes(item.status)
-      ).length,
+      unseen: matches.filter((item) => ["shortlist", "sent"].includes(item.status))
+        .length,
       viewed: matches.filter((item) => item.status === "viewed").length,
       inWork: matches.filter((item) =>
         ["invited", "interviewed", "offered"].includes(item.status)
@@ -352,7 +351,13 @@ export default function CandidateMatchesPage() {
   }, [matches, filter]);
 
   if (loading) {
-    return <main className="px-4 py-6">Загрузка откликов...</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка откликов...
+        </div>
+      </main>
+    );
   }
 
   if (errorText && !candidate) {
@@ -367,54 +372,58 @@ export default function CandidateMatchesPage() {
 
   return (
     <main className="space-y-5 px-4 py-5 md:space-y-6 md:py-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-violet-600">
-                Отклики
-              </p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-                Что сейчас по вашим вакансиям
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-                Здесь видно, где работодатель еще не дошел до отклика, где уже
-                посмотрел вас и где стоит ждать сообщение или звонок.
-              </p>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-violet-600">
+                  Отклики
+                </p>
 
-              {candidate ? (
-                <div className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-                  {candidate.full_name} · {candidate.primary_role}
-                </div>
-              ) : null}
+                <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+                  Что сейчас по вашим вакансиям
+                </h1>
+
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                  Здесь видно, где работодатель еще не дошел до отклика, где уже
+                  посмотрел вас и где стоит ждать сообщение или звонок.
+                </p>
+
+                {candidate ? (
+                  <div className="mt-3 inline-flex rounded-full bg-violet-50 px-3 py-1 text-sm text-violet-700 ring-1 ring-violet-100">
+                    {candidate.primary_role}
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => {
-                void loadData();
-              }}
-              className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-            >
-              Обновить статусы
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  void loadData();
+                }}
+                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+              >
+                Обновить статусы
+              </button>
 
-            <Link
-              href="/candidate/vacancies"
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
-            >
-              Смотреть вакансии
-            </Link>
+              <Link
+                href="/candidate/vacancies"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
+              >
+                Смотреть вакансии
+              </Link>
 
-            <button
-              type="button"
-              onClick={() => setShowFilters((prev) => !prev)}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50 sm:ml-auto"
-            >
-              {showFilters ? "Скрыть фильтры" : "Фильтры"}
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowFilters((prev) => !prev)}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50 sm:ml-auto"
+              >
+                {showFilters ? "Скрыть фильтры" : "Фильтры"}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -425,34 +434,32 @@ export default function CandidateMatchesPage() {
         </div>
       ) : null}
 
-      <section className="-mx-4 overflow-x-auto px-4">
-        <div className="flex gap-3 md:grid md:grid-cols-4 md:gap-4">
-          <div className="min-w-[160px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Всего</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.total}
-            </div>
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Всего</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {stats.total}
           </div>
+        </div>
 
-          <div className="min-w-[160px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Новых</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.unseen}
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Новых</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {stats.unseen}
           </div>
+        </div>
 
-          <div className="min-w-[160px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Есть движение</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.inWork}
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Есть движение</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {stats.inWork}
           </div>
+        </div>
 
-          <div className="min-w-[160px] rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-sm text-slate-500">Завершены</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-900">
-              {stats.finished}
-            </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-sm text-slate-500">Завершены</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {stats.finished}
           </div>
         </div>
       </section>
@@ -511,7 +518,9 @@ export default function CandidateMatchesPage() {
             return (
               <article
                 key={match.id}
-                className={`rounded-3xl border p-4 shadow-sm md:p-5 ${cardAccentClasses(match.status)}`}
+                className={`rounded-3xl border p-4 shadow-sm md:p-5 ${cardAccentClasses(
+                  match.status
+                )}`}
               >
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">

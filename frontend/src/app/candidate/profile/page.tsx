@@ -47,7 +47,10 @@ function getProfileBadge(candidate: CandidateProfile | null) {
   };
 }
 
-function getNextAction(candidate: CandidateProfile | null, dashboard: CandidateDashboard | null) {
+function getNextAction(
+  candidate: CandidateProfile | null,
+  dashboard: CandidateDashboard | null
+) {
   if (!candidate || !dashboard) {
     return {
       title: "Проверьте профиль",
@@ -83,12 +86,29 @@ function getNextAction(candidate: CandidateProfile | null, dashboard: CandidateD
   };
 }
 
+function detectTelegramWebApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const w = window as typeof window & {
+    Telegram?: {
+      WebApp?: {
+        initData?: string;
+      };
+    };
+  };
+
+  return Boolean(w.Telegram?.WebApp?.initData?.trim());
+}
+
 export default function CandidateProfilePage() {
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [isTelegram, setIsTelegram] = useState(false);
 
   async function loadData() {
     try {
@@ -114,6 +134,7 @@ export default function CandidateProfilePage() {
   }
 
   useEffect(() => {
+    setIsTelegram(detectTelegramWebApp());
     void loadData();
   }, []);
 
@@ -169,7 +190,13 @@ export default function CandidateProfilePage() {
   );
 
   if (loading) {
-    return <main className="px-4 py-6">Загрузка...</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка...
+        </div>
+      </main>
+    );
   }
 
   if (!dashboard || !candidate) {
@@ -189,75 +216,98 @@ export default function CandidateProfilePage() {
   }
 
   return (
-    <main className="space-y-6 px-4 py-6">
+    <main className={`px-4 ${isTelegram ? "space-y-5 py-5" : "space-y-6 py-6"}`}>
       {message ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
           {message}
         </div>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-sm text-slate-500">Профиль кандидата</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-              {dashboard.full_name}
-            </h1>
-            <p className="mt-3 text-sm leading-6 text-slate-600">
-              Здесь можно быстро проверить свой статус, обновить готовность к выходу
-              и перейти туда, где сейчас важнее всего действие.
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-2xl">
+              <p
+                className={`font-medium ${
+                  isTelegram
+                    ? "text-xs uppercase tracking-[0.16em] text-violet-600"
+                    : "text-sm text-slate-500"
+                }`}
+              >
+                Профиль кандидата
+              </p>
+
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                {isTelegram ? "Ваш профиль" : dashboard.full_name}
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Здесь можно быстро проверить свой статус, обновить готовность к
+                выходу и перейти туда, где сейчас важнее всего действие.
+              </p>
+
+              <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
+                {dashboard.primary_role}
+              </div>
+            </div>
+
+            <div
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${profileBadge.className}`}
+            >
+              {profileBadge.text}
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Сейчас главное
+            </div>
+
+            <div className="mt-2 text-lg font-semibold text-slate-900 md:text-xl">
+              {nextAction.title}
+            </div>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              {nextAction.text}
             </p>
-          </div>
 
-          <div
-            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${profileBadge.className}`}
-          >
-            {profileBadge.text}
-          </div>
-        </div>
+            <div className={`mt-5 flex ${isTelegram ? "flex-col" : "flex-wrap"} gap-3`}>
+              <Link
+                href={nextAction.href}
+                className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                {nextAction.label}
+              </Link>
 
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            Сейчас главное
-          </div>
-
-          <div className="mt-2 text-xl font-semibold text-slate-900">
-            {nextAction.title}
-          </div>
-
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            {nextAction.text}
-          </p>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link
-              href={nextAction.href}
-              className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              {nextAction.label}
-            </Link>
-
-            <Link
-              href="/candidate/onboarding"
-              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Редактировать анкету
-            </Link>
+              <Link
+                href="/candidate/onboarding"
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Редактировать анкету
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">Коротко о профиле</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Только самое важное, без лишнего шума.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Коротко о профиле</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Только самое важное, без лишнего шума.
+          </p>
         </div>
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {!isTelegram ? (
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Кандидат</div>
+              <div className="mt-1 text-base font-medium text-slate-900">
+                {dashboard.full_name}
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="text-xs text-slate-500">Основная роль</div>
             <div className="mt-1 text-base font-medium text-slate-900">
@@ -283,14 +333,16 @@ export default function CandidateProfilePage() {
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="text-xs text-slate-500">Желаемый доход</div>
             <div className="mt-1 text-base font-medium text-slate-900">
-              {candidate.expected_income?.trim() ? candidate.expected_income : "Не указан"}
+              {candidate.expected_income?.trim()
+                ? candidate.expected_income
+                : "Не указан"}
             </div>
           </div>
         </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-semibold">Статусы и результат</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Статусы и результат</h2>
 
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-2xl bg-slate-50 p-4">
@@ -324,9 +376,13 @@ export default function CandidateProfilePage() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-semibold">Быстро обновить готовность</h2>
+        <h2 className="text-xl font-semibold text-slate-900">
+          Быстро обновить готовность
+        </h2>
+
         <p className="mt-2 text-sm text-slate-500">
-          Это полезно, если хотите сразу показать работодателю, насколько быстро готовы выйти.
+          Это полезно, если хотите сразу показать работодателю, насколько быстро
+          готовы выйти.
         </p>
 
         <div className="mt-5 flex flex-wrap gap-3">
@@ -369,26 +425,26 @@ export default function CandidateProfilePage() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-semibold">Куда перейти дальше</h2>
+        <h2 className="text-xl font-semibold text-slate-900">Куда перейти дальше</h2>
 
-        <div className="mt-4 flex flex-wrap gap-3">
+        <div className={`mt-4 flex ${isTelegram ? "flex-col" : "flex-wrap"} gap-3`}>
           <Link
             href="/candidate/vacancies"
-            className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
+            className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
           >
             Смотреть вакансии
           </Link>
 
           <Link
             href="/candidate/matches"
-            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Мои отклики
           </Link>
 
           <Link
             href="/candidate/start"
-            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             На стартовую
           </Link>

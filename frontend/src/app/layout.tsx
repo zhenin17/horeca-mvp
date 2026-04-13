@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import ClientShell from "./shell";
 
@@ -15,11 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" suppressHydrationWarning>
+      <head>
+        <script src="https://telegram.org/js/telegram-web-app.js" />
+      </head>
       <body className="bg-white text-slate-900">
-        <Script
-          src="https://telegram.org/js/telegram-web-app.js"
-          strategy="beforeInteractive"
-        />
         <ClientShell>{children}</ClientShell>
       </body>
     </html>

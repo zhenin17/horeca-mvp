@@ -39,6 +39,41 @@ const initialForm: CandidateForm = {
   expected_income: "",
 };
 
+function detectTelegramWebApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const w = window as typeof window & {
+    Telegram?: {
+      WebApp?: {
+        initData?: string;
+      };
+    };
+  };
+
+  return Boolean(w.Telegram?.WebApp?.initData?.trim());
+}
+
+function formatReadyToStartPreview(value: string) {
+  switch (value) {
+    case "today":
+      return "Сегодня";
+    case "tomorrow":
+      return "Завтра";
+    case "3days":
+      return "В течение 3 дней";
+    case "week":
+      return "В течение недели";
+    default:
+      return value || "-";
+  }
+}
+
+function inputClass() {
+  return "w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900";
+}
+
 export default function CandidateOnboardingPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<CandidateForm>(initialForm);
@@ -46,8 +81,11 @@ export default function CandidateOnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"error" | "success" | "">("");
+  const [isTelegram, setIsTelegram] = useState(false);
 
   useEffect(() => {
+    setIsTelegram(detectTelegramWebApp());
+
     async function loadCandidate() {
       try {
         setMessage("");
@@ -86,7 +124,10 @@ export default function CandidateOnboardingPage() {
     void loadCandidate();
   }, []);
 
-  function updateField<K extends keyof CandidateForm>(key: K, value: CandidateForm[K]) {
+  function updateField<K extends keyof CandidateForm>(
+    key: K,
+    value: CandidateForm[K]
+  ) {
     setForm((prev) => ({
       ...prev,
       [key]: value,
@@ -232,11 +273,17 @@ export default function CandidateOnboardingPage() {
   }
 
   if (loading) {
-    return <main className="px-4 py-6">Загрузка анкеты...</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка анкеты...
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="space-y-6 px-4 py-6">
+    <main className={`px-4 ${isTelegram ? "space-y-5 py-5" : "space-y-6 py-6"}`}>
       <div>
         <Link href="/candidate/start" className="text-sm text-slate-600 underline">
           ← Назад
@@ -255,30 +302,48 @@ export default function CandidateOnboardingPage() {
         </div>
       ) : null}
 
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-2xl">
+              <p
+                className={`font-medium ${
+                  isTelegram
+                    ? "text-xs uppercase tracking-[0.16em] text-violet-600"
+                    : "text-sm text-slate-500"
+                }`}
+              >
+                Анкета кандидата
+              </p>
+
+              <h1 className="mt-1 text-2xl font-semibold text-slate-900">
+                {stepTitle}
+              </h1>
+
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {stepDescription}
+              </p>
+            </div>
+
+            <div className="inline-flex rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-700 ring-1 ring-slate-200">
+              Шаг {step} из 4
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <div className="h-2 w-full rounded-full bg-white/80 ring-1 ring-slate-200">
+              <div
+                className="h-2 rounded-full bg-slate-900 transition-all"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div className="max-w-2xl">
-            <p className="text-sm font-medium text-slate-500">Анкета кандидата</p>
-            <h1 className="mt-1 text-2xl font-semibold">{stepTitle}</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{stepDescription}</p>
-          </div>
-
-          <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-            Шаг {step} из 4
-          </div>
-        </div>
-
-        <div className="mt-5">
-          <div className="h-2 w-full rounded-full bg-slate-100">
-            <div
-              className="h-2 rounded-full bg-slate-900 transition-all"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-        </div>
-
         {step === 1 ? (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Имя и фамилия
@@ -286,7 +351,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.full_name}
                 onChange={(e) => updateField("full_name", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="Например, Иван Иванов"
               />
             </div>
@@ -298,7 +363,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.phone}
                 onChange={(e) => updateField("phone", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="+79990000001"
               />
             </div>
@@ -310,7 +375,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.telegram_username}
                 onChange={(e) => updateField("telegram_username", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="ivan_test"
               />
             </div>
@@ -322,7 +387,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.city}
                 onChange={(e) => updateField("city", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="Санкт-Петербург"
               />
             </div>
@@ -334,7 +399,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.district}
                 onChange={(e) => updateField("district", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="Центральный"
               />
             </div>
@@ -342,7 +407,7 @@ export default function CandidateOnboardingPage() {
         ) : null}
 
         {step === 2 ? (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Основная роль
@@ -350,7 +415,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.primary_role}
                 onChange={(e) => updateField("primary_role", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="Бариста"
               />
             </div>
@@ -361,8 +426,10 @@ export default function CandidateOnboardingPage() {
               </label>
               <input
                 value={form.horeca_experience_months}
-                onChange={(e) => updateField("horeca_experience_months", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                onChange={(e) =>
+                  updateField("horeca_experience_months", e.target.value)
+                }
+                className={inputClass()}
                 placeholder="12"
                 inputMode="numeric"
               />
@@ -371,7 +438,7 @@ export default function CandidateOnboardingPage() {
         ) : null}
 
         {step === 3 ? (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Когда готовы выйти
@@ -379,7 +446,7 @@ export default function CandidateOnboardingPage() {
               <select
                 value={form.ready_to_start}
                 onChange={(e) => updateField("ready_to_start", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
               >
                 <option value="today">Сегодня</option>
                 <option value="tomorrow">Завтра</option>
@@ -395,7 +462,7 @@ export default function CandidateOnboardingPage() {
               <input
                 value={form.expected_income}
                 onChange={(e) => updateField("expected_income", e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
+                className={inputClass()}
                 placeholder="4500 за смену"
               />
             </div>
@@ -403,7 +470,7 @@ export default function CandidateOnboardingPage() {
         ) : null}
 
         {step === 4 ? (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-xs text-slate-500">Имя и фамилия</div>
               <div className="mt-1 text-sm font-medium text-slate-900">
@@ -450,7 +517,7 @@ export default function CandidateOnboardingPage() {
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-xs text-slate-500">Готовность выйти</div>
               <div className="mt-1 text-sm font-medium text-slate-900">
-                {form.ready_to_start || "-"}
+                {formatReadyToStartPreview(form.ready_to_start)}
               </div>
             </div>
 
@@ -463,7 +530,7 @@ export default function CandidateOnboardingPage() {
           </div>
         ) : null}
 
-        <div className="mt-6 flex flex-wrap gap-3">
+        <div className={`mt-6 flex ${isTelegram ? "flex-col" : "flex-wrap"} gap-3`}>
           {step > 1 ? (
             <button
               type="button"
