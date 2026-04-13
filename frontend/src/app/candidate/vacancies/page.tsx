@@ -53,16 +53,6 @@ type VacancyCardItem = VacancyItem & {
 
 type VacancyFilter = "all" | "fresh" | "applied";
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        initData?: string;
-        initDataUnsafe?: Record<string, unknown>;
-      };
-    };
-  }
-}
 
 async function readJsonSafe<T>(response: Response): Promise<T | null> {
   const text = await response.text();
