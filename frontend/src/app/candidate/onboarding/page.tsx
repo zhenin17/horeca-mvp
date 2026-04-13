@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { getCurrentCandidateId } from "@/lib/current-user";
 
 type CandidateForm = {
   full_name: string;
@@ -55,27 +56,6 @@ function detectTelegramWebApp() {
   return Boolean(w.Telegram?.WebApp?.initData?.trim());
 }
 
-function getCurrentCandidateId() {
-  if (typeof window === "undefined") {
-    return 1;
-  }
-
-  const possibleKeys = [
-    "hubsty_candidate_id",
-    "candidateId",
-    "selectedCandidateId",
-  ];
-
-  for (const key of possibleKeys) {
-    const value = window.localStorage.getItem(key);
-    const id = Number(value);
-    if (Number.isFinite(id) && id > 0) {
-      return id;
-    }
-  }
-
-  return 1;
-}
 
 function formatReadyToStartPreview(value: string) {
   switch (value) {

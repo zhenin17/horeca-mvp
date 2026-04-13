@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { getCurrentCandidateId } from "@/lib/current-user";
 
 type CandidateItem = {
   id: number;
@@ -64,27 +65,6 @@ async function readJsonSafe<T>(response: Response): Promise<T | null> {
   }
 }
 
-function getCurrentCandidateId() {
-  if (typeof window === "undefined") {
-    return 1;
-  }
-
-  const possibleKeys = [
-    "hubsty_candidate_id",
-    "candidateId",
-    "selectedCandidateId",
-  ];
-
-  for (const key of possibleKeys) {
-    const value = window.localStorage.getItem(key);
-    const id = Number(value);
-    if (Number.isFinite(id) && id > 0) {
-      return id;
-    }
-  }
-
-  return 1;
-}
 
 function formatExperience(months: number) {
   if (months <= 0) {
