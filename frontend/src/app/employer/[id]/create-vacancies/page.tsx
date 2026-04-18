@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import {
+  CITY_OPTIONS,
+  ROLE_OPTIONS,
+  SCHEDULE_OPTIONS,
+  READY_TO_START_OPTIONS,
+  getDistrictOptions,
+} from "@/lib/location-options";
 
 type VacancyForm = {
   role: string;
@@ -56,7 +63,7 @@ export default function EmployerCreateVacancyPage() {
     district: "",
     salary_text: "",
     schedule_text: "",
-    needed_start: "",
+    needed_start: "tomorrow",
     status: "new",
   });
 
@@ -66,6 +73,7 @@ export default function EmployerCreateVacancyPage() {
   const [saving, setSaving] = useState(false);
 
   const isEmployerIdValid = useMemo(() => Number.isFinite(employerId), [employerId]);
+  const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && Number.isFinite(employerId)) {
@@ -74,10 +82,18 @@ export default function EmployerCreateVacancyPage() {
   }, [employerId]);
 
   function updateField<K extends keyof VacancyForm>(key: K, value: VacancyForm[K]) {
-    setForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        [key]: value,
+      };
+
+      if (key === "city") {
+        next.district = "";
+      }
+
+      return next;
+    });
 
     setFieldErrors((prev) => ({
       ...prev,
@@ -107,6 +123,14 @@ export default function EmployerCreateVacancyPage() {
 
       setSaving(true);
 
+      const readyToStartMap: Record<string, string> = {
+        today: "сегодня",
+        tomorrow: "завтра",
+        "3days": "в течение 3 дней",
+        week: "в течение недели",
+        next_week: "со следующей недели",
+      };
+      
       const payload = {
         employer_id: employerId,
         role: form.role.trim(),
@@ -115,10 +139,12 @@ export default function EmployerCreateVacancyPage() {
         district: form.district.trim() || null,
         salary_text: form.salary_text.trim() || null,
         schedule_text: form.schedule_text.trim() || null,
-        needed_start: form.needed_start.trim() || null,
+        needed_start: form.needed_start
+          ? readyToStartMap[form.needed_start] || form.needed_start.trim()
+          : null,
         status: form.status,
       };
-
+      console.log("vacancy payload", payload);
       const response = await fetch("/api/vacancies/", {
         method: "POST",
         headers: {
@@ -242,12 +268,18 @@ export default function EmployerCreateVacancyPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Роль *</label>
-            <input
+            <select
               value={form.role}
               onChange={(e) => updateField("role", e.target.value)}
-              placeholder="Например, бариста"
               className={inputClass(Boolean(fieldErrors.role))}
-            />
+            >
+              <option value="">Выберите роль</option>
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
             {fieldErrors.role ? (
               <div className="mt-1 text-sm text-red-600">{fieldErrors.role}</div>
             ) : null}
@@ -270,12 +302,18 @@ export default function EmployerCreateVacancyPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Город *</label>
-            <input
+            <select
               value={form.city}
               onChange={(e) => updateField("city", e.target.value)}
-              placeholder="Например, Санкт-Петербург"
               className={inputClass(Boolean(fieldErrors.city))}
-            />
+            >
+              <option value="">Выберите город</option>
+              {CITY_OPTIONS.map((city) => (
+                <option key={city} value={city}>
+                  {city}
+                </option>
+              ))}
+            </select>
             {fieldErrors.city ? (
               <div className="mt-1 text-sm text-red-600">{fieldErrors.city}</div>
             ) : null}
@@ -283,12 +321,21 @@ export default function EmployerCreateVacancyPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Район</label>
-            <input
+            <select
               value={form.district}
               onChange={(e) => updateField("district", e.target.value)}
-              placeholder="Например, Центральный"
               className={inputClass()}
-            />
+              disabled={!form.city}
+            >
+              <option value="">
+                {form.city ? "Выберите район" : "Сначала выберите город"}
+              </option>
+              {districtOptions.map((district) => (
+                <option key={district} value={district}>
+                  {district}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -305,24 +352,36 @@ export default function EmployerCreateVacancyPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">График</label>
-            <input
+            <select
               value={form.schedule_text}
               onChange={(e) => updateField("schedule_text", e.target.value)}
-              placeholder="Например, 2/2"
               className={inputClass()}
-            />
+            >
+              <option value="">Выберите график</option>
+              {SCHEDULE_OPTIONS.map((schedule) => (
+                <option key={schedule} value={schedule}>
+                  {schedule}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
               Когда нужен человек
             </label>
-            <input
+            <select
               value={form.needed_start}
               onChange={(e) => updateField("needed_start", e.target.value)}
-              placeholder="Например, завтра"
               className={inputClass()}
-            />
+            >
+              <option value="">Выберите срок</option>
+              {READY_TO_START_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
