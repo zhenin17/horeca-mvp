@@ -463,6 +463,86 @@ function getMatchStatusHint(status: string) {
   }
 }
 
+function getInitials(fullName: string) {
+  const parts = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) {
+    return "К";
+  }
+
+  return parts.map((part) => part[0]?.toUpperCase() || "").join("");
+}
+
+function getCandidateAvatarTone(role: string) {
+  const value = role.trim().toLowerCase();
+
+  if (value.includes("бар")) {
+    return "from-amber-100 via-orange-50 to-white text-amber-900";
+  }
+  if (value.includes("офици")) {
+    return "from-sky-100 via-blue-50 to-white text-sky-900";
+  }
+  if (value.includes("повар")) {
+    return "from-rose-100 via-pink-50 to-white text-rose-900";
+  }
+  if (value.includes("админ")) {
+    return "from-violet-100 via-fuchsia-50 to-white text-violet-900";
+  }
+  if (value.includes("касс")) {
+    return "from-emerald-100 via-green-50 to-white text-emerald-900";
+  }
+
+  return "from-slate-100 via-slate-50 to-white text-slate-900";
+}
+
+function getVacancyGradient(role: string) {
+  const value = role.trim().toLowerCase();
+
+  if (value.includes("бар")) {
+    return "from-amber-100 via-orange-50 to-white";
+  }
+  if (value.includes("офици")) {
+    return "from-sky-100 via-blue-50 to-white";
+  }
+  if (value.includes("повар")) {
+    return "from-rose-100 via-pink-50 to-white";
+  }
+  if (value.includes("админ")) {
+    return "from-violet-100 via-fuchsia-50 to-white";
+  }
+
+  return "from-slate-100 via-slate-50 to-white";
+}
+
+function getVacancyEmoji(role: string) {
+  const value = role.trim().toLowerCase();
+
+  if (value.includes("бар")) {
+    return "☕";
+  }
+  if (value.includes("офици")) {
+    return "🍽️";
+  }
+  if (value.includes("повар")) {
+    return "🍳";
+  }
+  if (value.includes("админ")) {
+    return "🧾";
+  }
+  if (value.includes("касс")) {
+    return "💳";
+  }
+  if (value.includes("хост")) {
+    return "✨";
+  }
+
+  return "📍";
+}
+
 export default function EmployerDashboardPage() {
   const params = useParams<{ id: string }>();
   const employerId = Number(params?.id);
@@ -885,57 +965,65 @@ export default function EmployerDashboardPage() {
             {vacanciesWithStats.map((vacancy) => {
               const isSelected = vacancy.id === selectedVacancyId;
               const needsAttention = vacancy.newCount > 0;
+              const vacancyGradient = getVacancyGradient(vacancy.role);
+              const vacancyEmoji = getVacancyEmoji(vacancy.role);
 
               return (
                 <button
                   key={vacancy.id}
                   type="button"
                   onClick={() => setSelectedVacancyId(vacancy.id)}
-                  className={`w-full rounded-2xl border p-4 text-left transition ${
+                  className={`w-full overflow-hidden rounded-3xl border text-left transition ${
                     isSelected
-                      ? "border-slate-900 bg-slate-50"
+                      ? "border-slate-900 bg-slate-50 shadow-sm"
                       : needsAttention
-                        ? "border-amber-300 bg-amber-50 hover:bg-amber-100"
-                        : "border-slate-200 bg-white hover:bg-slate-50"
+                        ? "border-amber-300 bg-white shadow-sm hover:shadow-md"
+                        : "border-slate-200 bg-white shadow-sm hover:shadow-md"
                   }`}
                 >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="font-medium text-slate-900">
-                        {vacancy.role} · {vacancy.venue_name}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-600">
-                        {vacancy.city}
-                        {vacancy.district ? `, ${vacancy.district}` : ""}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        Статус: {vacancyStatusLabel(vacancy.status)}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        График: {vacancy.schedule_text || "—"}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        Доход: {vacancy.salary_text || "—"}
-                      </div>
-                      {needsAttention ? (
-                        <div className="mt-2 text-sm font-medium text-amber-800">
-                          Требуют внимания: {vacancy.newCount} новых
+                  <div className={`bg-gradient-to-br ${vacancyGradient} p-4`}>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/90 text-xl shadow-sm ring-1 ring-slate-200">
+                          {vacancyEmoji}
                         </div>
-                      ) : null}
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2 text-sm md:min-w-[280px]">
-                      <div className="rounded-lg bg-slate-100 px-3 py-2">
-                        Всего: {vacancy.totalCount}
+                        <div className="mt-4 font-semibold text-slate-900">
+                          {vacancy.role} · {vacancy.venue_name}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-700">
+                          {vacancy.city}
+                          {vacancy.district ? `, ${vacancy.district}` : ""}
+                        </div>
+                        <div className="mt-2 text-sm text-slate-600">
+                          Статус: {vacancyStatusLabel(vacancy.status)}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          График: {vacancy.schedule_text || "—"}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          Доход: {vacancy.salary_text || "—"}
+                        </div>
+                        {needsAttention ? (
+                          <div className="mt-2 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
+                            Требуют внимания: {vacancy.newCount} новых
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="rounded-lg bg-amber-100 px-3 py-2">
-                        Новые: {vacancy.newCount}
-                      </div>
-                      <div className="rounded-lg bg-sky-100 px-3 py-2">
-                        В работе: {vacancy.inWorkCount}
-                      </div>
-                      <div className="rounded-lg bg-emerald-100 px-3 py-2">
-                        Завершены: {vacancy.finishedCount}
+
+                      <div className="grid grid-cols-2 gap-2 text-sm md:min-w-[280px]">
+                        <div className="rounded-2xl bg-white/80 px-3 py-3">
+                          Всего: {vacancy.totalCount}
+                        </div>
+                        <div className="rounded-2xl bg-amber-100 px-3 py-3">
+                          Новые: {vacancy.newCount}
+                        </div>
+                        <div className="rounded-2xl bg-sky-100 px-3 py-3">
+                          В работе: {vacancy.inWorkCount}
+                        </div>
+                        <div className="rounded-2xl bg-emerald-100 px-3 py-3">
+                          Завершены: {vacancy.finishedCount}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1009,159 +1097,176 @@ export default function EmployerDashboardPage() {
                   const score = match.match_score ?? 0;
                   const phoneHref = normalizePhoneHref(match.candidate.phone);
                   const telegramHref = normalizeTelegramHref(match.candidate.telegram_username);
+                  const initials = getInitials(match.candidate.full_name);
+                  const avatarTone = getCandidateAvatarTone(match.candidate.primary_role);
 
                   return (
                     <div
                       key={match.id}
-                      className="rounded-2xl border border-slate-200 bg-white p-4"
+                      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
                     >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-3">
-                          <div className="font-medium text-slate-900">
-                            {match.candidate.full_name}
-                          </div>
-
-                          <div className="text-sm text-slate-600">
-                            Роль: {match.candidate.primary_role}
-                          </div>
-
-                          <div className="text-sm text-slate-600">
-                            Район: {match.candidate.city}
-                            {match.candidate.district
-                              ? `, ${match.candidate.district}`
-                              : ""}
-                          </div>
-
-                          <div className="text-sm text-slate-600">
-                            Опыт: {formatExperience(match.candidate.horeca_experience_months)}
-                          </div>
-
-                          <div className="text-sm text-slate-600">
-                            Готов выйти: {formatReadyToStart(match.candidate.ready_to_start)}
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 pt-1 text-xs">
-                            <span className="rounded-full bg-slate-100 px-3 py-1">
-                              {fitLabel(score)} · {score}
-                            </span>
-
-                            <span className="rounded-full bg-slate-100 px-3 py-1">
-                              Статус: {matchStatusLabel(match.status)}
-                            </span>
-
-                            <span className="rounded-full bg-slate-100 px-3 py-1">
-                              Надежность:{" "}
-                              {reliability
-                                ? `${reliabilityLabel(reliability.reliability_score)} (${reliability.reliability_score})`
-                                : "Без оценки"}
-                            </span>
-                          </div>
-
-                          <div>
-                            <div className="text-xs uppercase tracking-wide text-slate-500">
-                              Почему подходит
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {fitReasons.map((reason) => (
-                                <span
-                                  key={reason}
-                                  className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700"
-                                >
-                                  {reason}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
-                            {getMatchStatusHint(match.status)}
-                          </div>
-
-                          {contactsOpened ? (
-                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                              <div className="font-medium text-emerald-900">
-                                Следующий шаг — связаться с кандидатом
+                      <div className="p-4 md:p-5">
+                        <div className="flex flex-col gap-5">
+                          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                            <div className="flex min-w-0 gap-4">
+                              <div
+                                className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${avatarTone} text-base font-semibold shadow-sm ring-1 ring-slate-200`}
+                              >
+                                {initials}
                               </div>
 
-                              <div className="mt-2">Телефон: {match.candidate.phone}</div>
+                              <div className="min-w-0">
+                                <div className="text-lg font-semibold text-slate-900">
+                                  {match.candidate.full_name}
+                                </div>
 
-                              {match.candidate.telegram_username ? (
-                                <div className="mt-1">
-                                  Telegram: @{match.candidate.telegram_username}
+                                <div className="mt-1 text-sm text-slate-600">
+                                  {match.candidate.primary_role}
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                                    {match.candidate.city}
+                                    {match.candidate.district
+                                      ? `, ${match.candidate.district}`
+                                      : ""}
+                                  </span>
+
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                                    Опыт: {formatExperience(match.candidate.horeca_experience_months)}
+                                  </span>
+
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                                    Может выйти: {formatReadyToStart(match.candidate.ready_to_start)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100">
+                                {fitLabel(score)} · {score}
+                              </span>
+
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                                {matchStatusLabel(match.status)}
+                              </span>
+
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                                {reliability
+                                  ? `Надежность: ${reliabilityLabel(reliability.reliability_score)} (${reliability.reliability_score})`
+                                  : "Надежность: без оценки"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                            <div className="rounded-2xl bg-slate-50 p-4">
+                              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                Почему подходит
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {fitReasons.map((reason) => (
+                                  <span
+                                    key={reason}
+                                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
+                                  >
+                                    {reason}
+                                  </span>
+                                ))}
+                              </div>
+
+                              <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
+                                {getMatchStatusHint(match.status)}
+                              </div>
+
+                              {match.comment ? (
+                                <div className="mt-4 text-sm text-slate-500">
+                                  Комментарий: {match.comment}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="space-y-4">
+                              {contactsOpened ? (
+                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                                  <div className="font-medium text-emerald-900">
+                                    Следующий шаг — связаться с кандидатом
+                                  </div>
+
+                                  <div className="mt-3 space-y-1">
+                                    <div>Телефон: {match.candidate.phone}</div>
+                                    {match.candidate.telegram_username ? (
+                                      <div>Telegram: @{match.candidate.telegram_username}</div>
+                                    ) : (
+                                      <div className="text-emerald-700">
+                                        Telegram не указан
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-4 flex flex-col gap-2">
+                                    {phoneHref ? (
+                                      <a
+                                        href={phoneHref}
+                                        className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                                      >
+                                        Позвонить
+                                      </a>
+                                    ) : null}
+
+                                    {telegramHref ? (
+                                      <a
+                                        href={telegramHref}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                      >
+                                        Написать в Telegram
+                                      </a>
+                                    ) : null}
+
+                                    {!phoneHref && !telegramHref ? (
+                                      <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
+                                        У кандидата нет контактов для быстрого выхода на связь.
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 </div>
                               ) : (
-                                <div className="mt-1 text-emerald-700">
-                                  Telegram не указан
+                                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                                  Контакты откроются после приглашения кандидата.
                                 </div>
                               )}
 
-                              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                                {phoneHref ? (
-                                  <a
-                                    href={phoneHref}
-                                    className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-                                  >
-                                    Позвонить
-                                  </a>
-                                ) : null}
-
-                                {telegramHref ? (
-                                  <a
-                                    href={telegramHref}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
-                                  >
-                                    Написать в Telegram
-                                  </a>
-                                ) : null}
-
-                                {!phoneHref && !telegramHref ? (
-                                  <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
-                                    У кандидата нет контактов для быстрого выхода на связь.
-                                  </div>
-                                ) : null}
-                              </div>
+                              {actions.length === 0 ? (
+                                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                                  Для текущего статуса больше нет доступных действий.
+                                </div>
+                              ) : (
+                                <div className="grid gap-2">
+                                  {actions.map((action) => (
+                                    <button
+                                      key={action.key}
+                                      type="button"
+                                      disabled={busyMatchId === match.id}
+                                      onClick={() =>
+                                        void runMatchAction(
+                                          match.id,
+                                          action.endpoint,
+                                          action.successText
+                                        )
+                                      }
+                                      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {busyMatchId === match.id ? "Сохраняем..." : action.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          ) : (
-                            <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
-                              Контакты откроются после приглашения кандидата.
-                            </div>
-                          )}
-
-                          {match.comment ? (
-                            <div className="text-sm text-slate-500">
-                              Комментарий: {match.comment}
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="md:max-w-[320px]">
-                          {actions.length === 0 ? (
-                            <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
-                              Для текущего статуса больше нет доступных действий.
-                            </div>
-                          ) : (
-                            <div className="grid gap-2">
-                              {actions.map((action) => (
-                                <button
-                                  key={action.key}
-                                  type="button"
-                                  disabled={busyMatchId === match.id}
-                                  onClick={() =>
-                                    void runMatchAction(
-                                      match.id,
-                                      action.endpoint,
-                                      action.successText
-                                    )
-                                  }
-                                  className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                  {busyMatchId === match.id ? "Сохраняем..." : action.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                          </div>
                         </div>
                       </div>
                     </div>

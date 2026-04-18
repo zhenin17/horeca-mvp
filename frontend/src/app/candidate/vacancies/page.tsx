@@ -133,15 +133,15 @@ function formatMatchStatus(status: string) {
 
 function getStatusHint(match?: MatchItem | null) {
   if (!match) {
-    return "Новая для вас — можно открыть и решить, стоит ли откликаться.";
+    return "Новая для вас — можно быстро открыть и решить, откликаться ли сейчас.";
   }
 
   switch (match.status) {
     case "shortlist":
     case "sent":
-      return "Отклик уже отправлен. Сейчас лучше просто ждать ответа и смотреть другие вакансии.";
+      return "Отклик уже отправлен. Сейчас лучше ждать ответа и смотреть другие варианты.";
     case "viewed":
-      return "Работодатель уже посмотрел отклик. Лучше быть на связи.";
+      return "Работодатель уже увидел отклик. Лучше быть на связи.";
     case "invited":
     case "interviewed":
     case "offered":
@@ -315,12 +315,68 @@ function getPrimaryActionText(match?: MatchItem | null) {
   return "Посмотреть вакансию";
 }
 
+function getRoleEmoji(role: string) {
+  const value = role.trim().toLowerCase();
+
+  if (value.includes("бар")) {
+    return "☕";
+  }
+  if (value.includes("офици")) {
+    return "🍽️";
+  }
+  if (value.includes("повар")) {
+    return "🍳";
+  }
+  if (value.includes("касс")) {
+    return "💳";
+  }
+  if (value.includes("админ")) {
+    return "🧾";
+  }
+  if (value.includes("хост")) {
+    return "✨";
+  }
+
+  return "📍";
+}
+
+function getRoleGradient(role: string) {
+  const value = role.trim().toLowerCase();
+
+  if (value.includes("бар")) {
+    return "from-amber-100 via-orange-50 to-white";
+  }
+  if (value.includes("офици")) {
+    return "from-sky-100 via-blue-50 to-white";
+  }
+  if (value.includes("повар")) {
+    return "from-rose-100 via-pink-50 to-white";
+  }
+  if (value.includes("касс")) {
+    return "from-emerald-100 via-green-50 to-white";
+  }
+  if (value.includes("админ")) {
+    return "from-violet-100 via-fuchsia-50 to-white";
+  }
+
+  return "from-slate-100 via-slate-50 to-white";
+}
+
+function getLocationLine(vacancy: VacancyItem) {
+  if (vacancy.city && vacancy.district) {
+    return `${vacancy.city}, ${vacancy.district}`;
+  }
+
+  return vacancy.city || vacancy.district || "Локация не указана";
+}
+
 export default function CandidateVacanciesPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
+  const [messageText, setMessageText] = useState("");
   const [candidate, setCandidate] = useState<CandidateItem | null>(null);
   const [vacancies, setVacancies] = useState<VacancyCardItem[]>([]);
-  const [filter, setFilter] = useState<VacancyFilter>("fresh");
+  const [filter, setFilter] = useState<VacancyFilter>("all");
   const [isTelegram, setIsTelegram] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -328,6 +384,7 @@ export default function CandidateVacanciesPage() {
     try {
       setLoading(true);
       setErrorText("");
+      setMessageText("");
 
       const candidateId = getCurrentCandidateId();
 
@@ -548,6 +605,12 @@ export default function CandidateVacanciesPage() {
         </div>
       </section>
 
+      {messageText ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {messageText}
+        </div>
+      ) : null}
+
       {errorText ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
@@ -613,103 +676,130 @@ export default function CandidateVacanciesPage() {
           </div>
         ) : (
           <div className="mt-4 space-y-4">
-            {filteredVacancies.map((vacancy) => (
-              <div
-                key={vacancy.id}
-                className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <div className="text-lg font-semibold text-slate-900">
-                        {vacancy.role}
+            {filteredVacancies.map((vacancy) => {
+              const roleEmoji = getRoleEmoji(vacancy.role);
+              const roleGradient = getRoleGradient(vacancy.role);
+
+              return (
+                <div
+                  key={vacancy.id}
+                  className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
+                >
+                  <div className={`bg-gradient-to-br ${roleGradient} p-4`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/90 text-xl shadow-sm ring-1 ring-slate-200">
+                          {roleEmoji}
+                        </div>
+
+                        <div className="mt-4 space-y-1">
+                          <div className="text-xl font-semibold text-slate-900">
+                            {vacancy.role}
+                          </div>
+                          <div className="text-sm text-slate-700">
+                            {vacancy.venue_name}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-sm text-slate-600">
-                        {vacancy.venue_name}
+
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="rounded-full bg-white/90 px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
+                          {getLocationLine(vacancy)}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${getVacancyStatusTone(
+                            vacancy.match
+                          )}`}
+                        >
+                          {vacancy.match
+                            ? formatMatchStatus(vacancy.match.status)
+                            : "Еще без отклика"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl bg-slate-50 p-3">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                          Доход
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">
+                          {formatIncomeText(vacancy.salary_text)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-3">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                          График
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">
+                          {vacancy.schedule_text || "Не указан"}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl bg-slate-50 p-3">
+                        <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                          Когда нужен человек
+                        </div>
+                        <div className="mt-2 text-sm font-medium text-slate-900">
+                          {formatReadyToStart(vacancy.needed_start)}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 text-sm text-slate-600">
-                      <span className="rounded-full bg-slate-100 px-3 py-1">
-                        {formatIncomeText(vacancy.salary_text)}
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1">
-                        {vacancy.city}
-                        {vacancy.district ? `, ${vacancy.district}` : ""}
-                      </span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1">
-                        {formatReadyToStart(vacancy.needed_start)}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
+                    <div className="mt-4 flex flex-wrap gap-2">
                       <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100">
                         {fitScoreLabel(vacancy.fitScore)} · {vacancy.fitScore}
                       </span>
 
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${getVacancyStatusTone(
-                          vacancy.match
-                        )}`}
-                      >
-                        {vacancy.match
-                          ? formatMatchStatus(vacancy.match.status)
-                          : "Еще без отклика"}
-                      </span>
+                      {vacancy.fitExplanation.reasons.map((reason) => (
+                        <span
+                          key={reason}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
+                        >
+                          {reason}
+                        </span>
+                      ))}
                     </div>
 
-                    <div className="rounded-2xl bg-slate-50 p-3">
+                    <div className="mt-4 rounded-2xl bg-slate-50 p-3">
                       <div className="text-sm font-medium text-slate-900">
                         {vacancy.fitExplanation.title}
                       </div>
 
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {vacancy.fitExplanation.reasons.map((reason) => (
-                          <span
-                            key={reason}
-                            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
-                          >
-                            {reason}
-                          </span>
-                        ))}
+                      <div className="mt-2 text-sm leading-6 text-slate-600">
+                        {getStatusHint(vacancy.match)}
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
-                      {getStatusHint(vacancy.match)}
-                    </div>
-
-                    {!isTelegram ? (
-                      <div className="text-sm text-slate-500">
-                        График: {vacancy.schedule_text || "Не указан"}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="flex w-full flex-col gap-2 lg:w-[220px] lg:min-w-[220px]">
-                    <Link
-                      href={`/candidate/vacancies/${vacancy.id}`}
-                      className="rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white hover:opacity-95"
-                    >
-                      {getPrimaryActionText(vacancy.match)}
-                    </Link>
-
-                    {vacancy.match ? (
+                    <div className="mt-4 flex flex-col gap-2 lg:flex-row">
                       <Link
-                        href="/candidate/matches"
-                        className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        href={`/candidate/vacancies/${vacancy.id}`}
+                        className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white hover:opacity-95"
                       >
-                        Смотреть статус
+                        {getPrimaryActionText(vacancy.match)}
                       </Link>
-                    ) : (
-                      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">
-                        Отклик можно отправить внутри вакансии
-                      </div>
-                    )}
+
+                      {vacancy.match ? (
+                        <Link
+                          href="/candidate/matches"
+                          className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+                        >
+                          Смотреть статус
+                        </Link>
+                      ) : (
+                        <div className="inline-flex items-center justify-center rounded-2xl bg-slate-50 px-4 py-3 text-center text-sm text-slate-500">
+                          Отклик отправляется внутри вакансии
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
