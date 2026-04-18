@@ -81,10 +81,6 @@ export default function EmployerLayout({
               <Link href="/employer/list" className={topNavClass(isList)}>
                 Список
               </Link>
-
-              <Link href="/telegram" className={topNavClass(false)}>
-                Роли
-              </Link>
             </nav>
           </div>
         </div>
@@ -117,10 +113,6 @@ export default function EmployerLayout({
 
               <Link href="/employer/list" className={bottomNavClass(isList)}>
                 Список
-              </Link>
-
-              <Link href="/telegram" className={bottomNavClass(false)}>
-                Роли
               </Link>
             </nav>
           </div>

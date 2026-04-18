@@ -451,6 +451,15 @@ export default function CandidateProfilePage() {
           >
             На стартовую
           </Link>
+
+          {isTelegram ? (
+            <Link
+              href="/telegram"
+              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Сменить роль
+            </Link>
+          ) : null}
         </div>
       </section>
     </main>
