@@ -131,6 +131,31 @@ function formatMatchStatus(status: string) {
   }
 }
 
+function getStatusHint(match?: MatchItem | null) {
+  if (!match) {
+    return "Новая для вас — можно открыть и решить, стоит ли откликаться.";
+  }
+
+  switch (match.status) {
+    case "shortlist":
+    case "sent":
+      return "Отклик уже отправлен. Сейчас лучше просто ждать ответа и смотреть другие вакансии.";
+    case "viewed":
+      return "Работодатель уже посмотрел отклик. Лучше быть на связи.";
+    case "invited":
+    case "interviewed":
+    case "offered":
+      return "По этой вакансии уже есть движение. Проверьте отклики и будьте на связи.";
+    case "hired":
+      return "Процесс по этой вакансии завершился успешно.";
+    case "rejected":
+    case "no_show":
+      return "По этой вакансии процесс завершен. Можно сфокусироваться на других вариантах.";
+    default:
+      return "Статус по вакансии уже есть в откликах.";
+  }
+}
+
 function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
   let score = 40;
 
@@ -194,6 +219,19 @@ function vacancyFilterLabel(filter: VacancyFilter) {
       return "С откликом";
     default:
       return "Все";
+  }
+}
+
+function vacancyFilterHint(filter: VacancyFilter) {
+  switch (filter) {
+    case "all":
+      return "Все вакансии, которые сейчас доступны вам на экране.";
+    case "fresh":
+      return "Сначала смотрите новые — это вакансии, где вы еще не откликались.";
+    case "applied":
+      return "Здесь вакансии, по которым процесс уже начался.";
+    default:
+      return "";
   }
 }
 
@@ -269,12 +307,20 @@ function getVacancyStatusTone(match?: MatchItem | null) {
   return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
 }
 
+function getPrimaryActionText(match?: MatchItem | null) {
+  if (!match) {
+    return "Открыть вакансию";
+  }
+
+  return "Посмотреть вакансию";
+}
+
 export default function CandidateVacanciesPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
   const [candidate, setCandidate] = useState<CandidateItem | null>(null);
   const [vacancies, setVacancies] = useState<VacancyCardItem[]>([]);
-  const [filter, setFilter] = useState<VacancyFilter>("all");
+  const [filter, setFilter] = useState<VacancyFilter>("fresh");
   const [isTelegram, setIsTelegram] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -366,6 +412,26 @@ export default function CandidateVacanciesPage() {
       applied: vacancies.filter((item) => Boolean(item.match)).length,
     };
   }, [vacancies]);
+
+  const nextStepText = useMemo(() => {
+    if (!candidate) {
+      return "Сначала проверьте профиль, чтобы вакансии подбирались точнее.";
+    }
+
+    if (!candidate.is_active) {
+      return "Сначала лучше привести профиль в порядок, потом смотреть вакансии.";
+    }
+
+    if (stats.fresh > 0) {
+      return "Начните с новых вакансий — там вы еще не откликались.";
+    }
+
+    if (stats.applied > 0) {
+      return "Новых вакансий мало. Проверьте отклики — там может быть движение.";
+    }
+
+    return "Сейчас можно обновить список или скорректировать профиль.";
+  }, [candidate, stats]);
 
   const filteredVacancies = useMemo(() => {
     if (filter === "all") {
@@ -465,6 +531,20 @@ export default function CandidateVacanciesPage() {
               </Link>
             </div>
           </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Что делать сейчас
+            </div>
+
+            <div className="mt-2 text-sm leading-6 text-slate-700">
+              {nextStepText}
+            </div>
+
+            <div className="mt-3 text-sm text-slate-600">
+              Совет: начните с вакансий с хорошим совпадением и без отклика.
+            </div>
+          </div>
         </div>
       </section>
 
@@ -503,22 +583,28 @@ export default function CandidateVacanciesPage() {
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         {(!isTelegram || showFilters) && (
-          <div className="flex flex-wrap gap-2">
-            {(["all", "fresh", "applied"] as VacancyFilter[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setFilter(item)}
-                className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
-                  filter === item
-                    ? "bg-violet-600 text-white"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {vacancyFilterLabel(item)}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="flex flex-wrap gap-2">
+              {(["all", "fresh", "applied"] as VacancyFilter[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setFilter(item)}
+                  className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                    filter === item
+                      ? "bg-violet-600 text-white"
+                      : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {vacancyFilterLabel(item)}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 text-sm text-slate-500">
+              {vacancyFilterHint(filter)}
+            </div>
+          </>
         )}
 
         {filteredVacancies.length === 0 ? (
@@ -589,6 +675,10 @@ export default function CandidateVacanciesPage() {
                       </div>
                     </div>
 
+                    <div className="rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
+                      {getStatusHint(vacancy.match)}
+                    </div>
+
                     {!isTelegram ? (
                       <div className="text-sm text-slate-500">
                         График: {vacancy.schedule_text || "Не указан"}
@@ -601,7 +691,7 @@ export default function CandidateVacanciesPage() {
                       href={`/candidate/vacancies/${vacancy.id}`}
                       className="rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white hover:opacity-95"
                     >
-                      Открыть вакансию
+                      {getPrimaryActionText(vacancy.match)}
                     </Link>
 
                     {vacancy.match ? (

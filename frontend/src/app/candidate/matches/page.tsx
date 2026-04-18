@@ -61,6 +61,14 @@ async function readJsonSafe<T>(response: Response): Promise<T | null> {
   }
 }
 
+function isTelegramMiniApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean(window.Telegram?.WebApp);
+}
+
 function statusLabel(status: string) {
   switch (status) {
     case "shortlist":
@@ -175,6 +183,23 @@ function filterLabel(filter: MatchFilter) {
   }
 }
 
+function filterHint(filter: MatchFilter) {
+  switch (filter) {
+    case "all":
+      return "Полная картина по всем откликам.";
+    case "unseen":
+      return "Здесь отклики, по которым работодатель еще не дошел до просмотра.";
+    case "viewed":
+      return "Здесь вакансии, где вас уже увидели.";
+    case "in_work":
+      return "Здесь уже есть движение: контакт, общение или предложение.";
+    case "finished":
+      return "Завершенные процессы: успех, отказ или остановка.";
+    default:
+      return "";
+  }
+}
+
 function cardAccentClasses(status: string) {
   if (status === "invited") {
     return "border-emerald-200 bg-emerald-50/70";
@@ -237,6 +262,32 @@ function compactLocation(vacancy?: VacancyItem | null) {
   return vacancy.city || vacancy.district || "Локация не указана";
 }
 
+function formatReadyToStart(value?: string | null) {
+  if (!value?.trim()) {
+    return "Не указано";
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "today":
+    case "сегодня":
+      return "Сегодня";
+    case "tomorrow":
+    case "завтра":
+      return "Завтра";
+    case "3days":
+    case "3_days":
+    case "3 дня":
+      return "В течение 3 дней";
+    case "week":
+    case "неделя":
+      return "В течение недели";
+    default:
+      return value;
+  }
+}
+
 export default function CandidateMatchesPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
@@ -244,6 +295,7 @@ export default function CandidateMatchesPage() {
   const [matches, setMatches] = useState<EnrichedMatchItem[]>([]);
   const [filter, setFilter] = useState<MatchFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [isTelegram, setIsTelegram] = useState(false);
 
   async function loadData() {
     try {
@@ -307,6 +359,7 @@ export default function CandidateMatchesPage() {
   }
 
   useEffect(() => {
+    setIsTelegram(isTelegramMiniApp());
     void loadData();
   }, []);
 
@@ -324,6 +377,26 @@ export default function CandidateMatchesPage() {
       ).length,
     };
   }, [matches]);
+
+  const nextStepText = useMemo(() => {
+    if (stats.inWork > 0) {
+      return "Сейчас главное — быть на связи. По части откликов уже есть движение.";
+    }
+
+    if (stats.viewed > 0) {
+      return "Работодатели уже посмотрели часть откликов. Лучше периодически проверять обновления.";
+    }
+
+    if (stats.unseen > 0) {
+      return "Новые отклики уже отправлены. Пока можно спокойно ждать и смотреть другие вакансии.";
+    }
+
+    if (stats.total > 0) {
+      return "По текущим откликам движение спокойное. Можно открыть новые вакансии и расширить выбор.";
+    }
+
+    return "Пока откликов нет. Начните с подходящих вакансий.";
+  }, [stats]);
 
   const filteredMatches = useMemo(() => {
     return matches.filter((item) => belongsToFilter(item.status, filter));
@@ -350,7 +423,7 @@ export default function CandidateMatchesPage() {
   }
 
   return (
-    <main className="space-y-5 px-4 py-5 md:space-y-6 md:py-6">
+    <main className={`space-y-5 px-4 py-5 ${isTelegram ? "" : "md:space-y-6 md:py-6"}`}>
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5">
           <div className="flex flex-col gap-4">
@@ -374,6 +447,16 @@ export default function CandidateMatchesPage() {
                     {candidate.primary_role}
                   </div>
                 ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Что делать сейчас
+              </div>
+
+              <div className="mt-2 text-sm leading-6 text-slate-700">
+                {nextStepText}
               </div>
             </div>
 
@@ -463,6 +546,8 @@ export default function CandidateMatchesPage() {
               )
             )}
           </div>
+
+          <div className="mt-3 text-sm text-slate-500">{filterHint(filter)}</div>
         </section>
       ) : null}
 
@@ -537,7 +622,7 @@ export default function CandidateMatchesPage() {
                           График: {vacancy?.schedule_text || "Не указан"}
                         </span>
                         <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          Выход: {vacancy?.needed_start || "Не указано"}
+                          Выход: {formatReadyToStart(vacancy?.needed_start)}
                         </span>
                       </div>
                     </div>
@@ -574,6 +659,22 @@ export default function CandidateMatchesPage() {
                       важно быть на связи в Telegram и по телефону.
                     </div>
                   ) : null}
+
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Link
+                      href={`/candidate/vacancies/${match.vacancy_id}`}
+                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                    >
+                      Открыть вакансию
+                    </Link>
+
+                    <Link
+                      href="/candidate/vacancies"
+                      className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
+                    >
+                      Смотреть другие вакансии
+                    </Link>
+                  </div>
                 </div>
               </article>
             );
