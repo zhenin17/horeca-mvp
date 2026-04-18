@@ -71,7 +71,7 @@ function formatReadyToStartPreview(value: string) {
 }
 
 function inputClass() {
-  return "w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900";
+  return "w-full rounded-2xl border border-slate-300 px-4 py-3 text-base outline-none transition focus:border-slate-900";
 }
 
 export default function CandidateOnboardingPage() {

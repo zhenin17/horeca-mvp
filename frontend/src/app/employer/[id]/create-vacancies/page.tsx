@@ -43,7 +43,7 @@ function validateForm(form: VacancyForm): FieldErrors {
 }
 
 function inputClass(hasError?: boolean) {
-  return `w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+  return `w-full rounded-2xl border px-4 py-3 text-base outline-none transition ${
     hasError
       ? "border-red-300 bg-red-50 focus:border-red-400"
       : "border-slate-300 bg-white focus:border-slate-900"
