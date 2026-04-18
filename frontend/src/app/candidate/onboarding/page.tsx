@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCurrentCandidateId } from "@/lib/current-user";
+import {
+  CITY_OPTIONS,
+  ROLE_OPTIONS,
+  READY_TO_START_OPTIONS,
+  getDistrictOptions,
+} from "@/lib/location-options";
 
 type CandidateForm = {
   full_name: string;
@@ -56,20 +62,12 @@ function detectTelegramWebApp() {
   return Boolean(w.Telegram?.WebApp?.initData?.trim());
 }
 
-
 function formatReadyToStartPreview(value: string) {
-  switch (value) {
-    case "today":
-      return "Сегодня";
-    case "tomorrow":
-      return "Завтра";
-    case "3days":
-      return "В течение 3 дней";
-    case "week":
-      return "В течение недели";
-    default:
-      return value || "-";
+  const found = READY_TO_START_OPTIONS.find((item) => item.value === value);
+  if (found) {
+    return found.label;
   }
+  return value || "-";
 }
 
 function inputClass() {
@@ -84,6 +82,8 @@ export default function CandidateOnboardingPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"error" | "success" | "">("");
   const [isTelegram, setIsTelegram] = useState(false);
+
+  const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
 
   useEffect(() => {
     setIsTelegram(detectTelegramWebApp());
@@ -132,10 +132,18 @@ export default function CandidateOnboardingPage() {
     key: K,
     value: CandidateForm[K]
   ) {
-    setForm((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        [key]: value,
+      };
+
+      if (key === "city") {
+        next.district = "";
+      }
+
+      return next;
+    });
   }
 
   const stepTitle = useMemo(() => {
@@ -390,24 +398,39 @@ export default function CandidateOnboardingPage() {
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Город
               </label>
-              <input
+              <select
                 value={form.city}
                 onChange={(e) => updateField("city", e.target.value)}
                 className={inputClass()}
-                placeholder="Санкт-Петербург"
-              />
+              >
+                <option value="">Выберите город</option>
+                {CITY_OPTIONS.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Район
               </label>
-              <input
+              <select
                 value={form.district}
                 onChange={(e) => updateField("district", e.target.value)}
                 className={inputClass()}
-                placeholder="Центральный"
-              />
+                disabled={!form.city}
+              >
+                <option value="">
+                  {form.city ? "Выберите район" : "Сначала выберите город"}
+                </option>
+                {districtOptions.map((district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         ) : null}
@@ -418,12 +441,18 @@ export default function CandidateOnboardingPage() {
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Основная роль
               </label>
-              <input
+              <select
                 value={form.primary_role}
                 onChange={(e) => updateField("primary_role", e.target.value)}
                 className={inputClass()}
-                placeholder="Бариста"
-              />
+              >
+                <option value="">Выберите роль</option>
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -454,10 +483,11 @@ export default function CandidateOnboardingPage() {
                 onChange={(e) => updateField("ready_to_start", e.target.value)}
                 className={inputClass()}
               >
-                <option value="today">Сегодня</option>
-                <option value="tomorrow">Завтра</option>
-                <option value="3days">В течение 3 дней</option>
-                <option value="week">В течение недели</option>
+                {READY_TO_START_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
 
