@@ -31,7 +31,7 @@ export default function EmployerStartPage() {
       try {
         setErrorText("");
 
-        const response = await fetch("/api/employers", {
+        const response = await fetch("/api/employers/", {
           cache: "no-store",
         });
 

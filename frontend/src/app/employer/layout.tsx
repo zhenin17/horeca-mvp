@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { getCurrentEmployerId } from "@/lib/current-user";
 
 function topNavClass(isActive: boolean) {
   return isActive
@@ -41,17 +42,21 @@ export default function EmployerLayout({
 
   const [mounted, setMounted] = useState(false);
   const [isTelegram, setIsTelegram] = useState(false);
+  const [currentEmployerId, setCurrentEmployerId] = useState<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
     setIsTelegram(detectTelegramWebApp());
+    setCurrentEmployerId(getCurrentEmployerId());
   }, []);
+
+  const employerDashboardHref = currentEmployerId ? `/employer/${currentEmployerId}` : "/employer/start";
 
   const isStart = pathname === "/employer/start";
   const isOnboarding = pathname.startsWith("/employer/onboarding");
+  const isList = pathname.startsWith("/employer/list");
   const isDashboard =
     /^\/employer\/\d+$/.test(pathname) || pathname.includes("/create-vacancies");
-  const isList = pathname.startsWith("/employer/list");
 
   const showTelegramUi = mounted && isTelegram;
 
@@ -74,12 +79,20 @@ export default function EmployerLayout({
                 Старт
               </Link>
 
+              <Link href={employerDashboardHref} className={topNavClass(isDashboard)}>
+                Кабинет
+              </Link>
+
               <Link href="/employer/onboarding" className={topNavClass(isOnboarding)}>
                 Анкета
               </Link>
 
               <Link href="/employer/list" className={topNavClass(isList)}>
                 Список
+              </Link>
+
+              <Link href="/telegram" className={topNavClass(false)}>
+                Роли
               </Link>
             </nav>
           </div>
@@ -105,6 +118,10 @@ export default function EmployerLayout({
             <nav className="flex items-center gap-2">
               <Link href="/employer/start" className={bottomNavClass(isStart)}>
                 Старт
+              </Link>
+
+              <Link href={employerDashboardHref} className={bottomNavClass(isDashboard)}>
+                Кабинет
               </Link>
 
               <Link href="/employer/onboarding" className={bottomNavClass(isOnboarding)}>
