@@ -150,8 +150,52 @@ function formatExperience(months: number) {
   return `${restMonths} мес.`;
 }
 
+function formatReadyToStart(value?: string | null) {
+  if (!value?.trim()) {
+    return "Не указано";
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "today":
+    case "сегодня":
+      return "Сегодня";
+    case "tomorrow":
+    case "завтра":
+      return "Завтра";
+    case "3days":
+    case "3_days":
+    case "3 дня":
+      return "В течение 3 дней";
+    case "week":
+    case "неделя":
+      return "В течение недели";
+    default:
+      return value;
+  }
+}
+
 function shouldShowContacts(status: string) {
   return ["invited", "interviewed", "offered", "hired"].includes(status);
+}
+
+function normalizePhoneHref(phone?: string | null) {
+  if (!phone?.trim()) {
+    return null;
+  }
+
+  const cleaned = phone.replace(/[^\d+]/g, "");
+  return cleaned ? `tel:${cleaned}` : null;
+}
+
+function normalizeTelegramHref(username?: string | null) {
+  if (!username?.trim()) {
+    return null;
+  }
+
+  const cleaned = username.trim().replace(/^@/, "");
+  return cleaned ? `https://t.me/${cleaned}` : null;
 }
 
 function getAvailableActions(status: string): MatchAction[] {
@@ -297,6 +341,36 @@ function belongsToFilter(status: string, filter: CandidateFilter) {
   return true;
 }
 
+function candidateFilterLabel(filter: CandidateFilter) {
+  switch (filter) {
+    case "new":
+      return "Новые";
+    case "in_work":
+      return "В работе";
+    case "finished":
+      return "Завершены";
+    case "all":
+      return "Все";
+    default:
+      return "Все";
+  }
+}
+
+function candidateFilterHint(filter: CandidateFilter) {
+  switch (filter) {
+    case "new":
+      return "Сначала смотрите новых кандидатов — здесь нужен самый быстрый разбор.";
+    case "in_work":
+      return "Здесь кандидаты, с которыми уже есть движение по вакансии.";
+    case "finished":
+      return "Здесь завершенные процессы: найм, отказ или остановка.";
+    case "all":
+      return "Полный список кандидатов по выбранной вакансии.";
+    default:
+      return "";
+  }
+}
+
 function fitLabel(score: number) {
   if (score >= 80) {
     return "Хорошее совпадение";
@@ -350,7 +424,7 @@ function buildCandidateFitReasons(
   }
 
   if (match.candidate.ready_to_start?.trim()) {
-    reasons.push(`Может выйти: ${match.candidate.ready_to_start}`);
+    reasons.push(`Может выйти: ${formatReadyToStart(match.candidate.ready_to_start)}`);
   }
 
   if (reliability && reliability.reliability_score >= 60) {
@@ -362,6 +436,31 @@ function buildCandidateFitReasons(
   }
 
   return reasons.slice(0, 3);
+}
+
+function getMatchStatusHint(status: string) {
+  switch (status) {
+    case "shortlist":
+      return "Кандидат только что попал в подборку. Сейчас лучше быстро решить, двигать ли дальше.";
+    case "sent":
+      return "Кандидат уже отправлен дальше по воронке, но решение еще не принято.";
+    case "viewed":
+      return "Кандидат просмотрен. Следующий шаг — пригласить или завершить процесс.";
+    case "invited":
+      return "Контакты уже открыты. Сейчас важно быстро связаться с кандидатом.";
+    case "interviewed":
+      return "Общение уже идет. Следующий шаг — решение по найму.";
+    case "offered":
+      return "Есть позитивный сигнал. Лучше не затягивать со следующим действием.";
+    case "hired":
+      return "Процесс завершился успешно.";
+    case "rejected":
+      return "По этому кандидату процесс завершен отказом.";
+    case "no_show":
+      return "Процесс остановился после приглашения или общения.";
+    default:
+      return "Следующий шаг зависит от вашего решения по кандидату.";
+  }
 }
 
 export default function EmployerDashboardPage() {
@@ -561,6 +660,22 @@ export default function EmployerDashboardPage() {
     };
   }, [vacanciesWithStats, matches]);
 
+  const nextStepText = useMemo(() => {
+    if (dashboardStats.newCandidates > 0) {
+      return "Сначала разберите новых кандидатов — это главный быстрый шаг по кабинету.";
+    }
+
+    if (dashboardStats.activeVacancies === 0) {
+      return "Сейчас у вас нет активных вакансий. Следующий шаг — создать новую.";
+    }
+
+    if (dashboardStats.inWorkCandidates > 0) {
+      return "По части кандидатов уже идет движение. Проверьте, кому пора написать или принять решение.";
+    }
+
+    return "Кабинет в порядке. Можно обновить вакансии или добавить новую.";
+  }, [dashboardStats]);
+
   async function runMatchAction(matchId: number, endpoint: string, successText: string) {
     try {
       setBusyMatchId(matchId);
@@ -677,6 +792,20 @@ export default function EmployerDashboardPage() {
           </div>
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Что делать сейчас
+            </div>
+
+            <div className="mt-2 text-sm leading-6 text-slate-700">
+              {nextStepText}
+            </div>
+
+            <div className="mt-3 text-sm text-slate-600">
+              Совет: начните с вакансий, где есть новые кандидаты и требуется быстрое решение.
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white/80 p-5">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
               Контактные данные
             </div>
@@ -836,7 +965,7 @@ export default function EmployerDashboardPage() {
                     {selectedVacancy.district ? `, ${selectedVacancy.district}` : ""}
                   </div>
                   <div>Статус вакансии: {vacancyStatusLabel(selectedVacancy.status)}</div>
-                  <div>Нужен человек: {selectedVacancy.needed_start || "—"}</div>
+                  <div>Нужен человек: {formatReadyToStart(selectedVacancy.needed_start)}</div>
                 </div>
               </div>
 
@@ -852,16 +981,14 @@ export default function EmployerDashboardPage() {
                         : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
-                    {item === "new"
-                      ? "Новые"
-                      : item === "in_work"
-                        ? "В работе"
-                        : item === "finished"
-                          ? "Завершены"
-                          : "Все"}
+                    {candidateFilterLabel(item)}
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="mt-3 text-sm text-slate-500">
+              {candidateFilterHint(candidateFilter)}
             </div>
 
             {selectedVacancyMatches.length === 0 ? (
@@ -880,6 +1007,8 @@ export default function EmployerDashboardPage() {
                     reliability
                   );
                   const score = match.match_score ?? 0;
+                  const phoneHref = normalizePhoneHref(match.candidate.phone);
+                  const telegramHref = normalizeTelegramHref(match.candidate.telegram_username);
 
                   return (
                     <div
@@ -908,7 +1037,7 @@ export default function EmployerDashboardPage() {
                           </div>
 
                           <div className="text-sm text-slate-600">
-                            Готов выйти: {match.candidate.ready_to_start}
+                            Готов выйти: {formatReadyToStart(match.candidate.ready_to_start)}
                           </div>
 
                           <div className="flex flex-wrap gap-2 pt-1 text-xs">
@@ -944,9 +1073,18 @@ export default function EmployerDashboardPage() {
                             </div>
                           </div>
 
+                          <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
+                            {getMatchStatusHint(match.status)}
+                          </div>
+
                           {contactsOpened ? (
-                            <div className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-800">
-                              <div>Телефон: {match.candidate.phone}</div>
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                              <div className="font-medium text-emerald-900">
+                                Следующий шаг — связаться с кандидатом
+                              </div>
+
+                              <div className="mt-2">Телефон: {match.candidate.phone}</div>
+
                               {match.candidate.telegram_username ? (
                                 <div className="mt-1">
                                   Telegram: @{match.candidate.telegram_username}
@@ -956,6 +1094,34 @@ export default function EmployerDashboardPage() {
                                   Telegram не указан
                                 </div>
                               )}
+
+                              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                                {phoneHref ? (
+                                  <a
+                                    href={phoneHref}
+                                    className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                                  >
+                                    Позвонить
+                                  </a>
+                                ) : null}
+
+                                {telegramHref ? (
+                                  <a
+                                    href={telegramHref}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                  >
+                                    Написать в Telegram
+                                  </a>
+                                ) : null}
+
+                                {!phoneHref && !telegramHref ? (
+                                  <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
+                                    У кандидата нет контактов для быстрого выхода на связь.
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
                           ) : (
                             <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">

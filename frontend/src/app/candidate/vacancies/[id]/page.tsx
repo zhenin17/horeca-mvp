@@ -65,6 +65,13 @@ async function readJsonSafe<T>(response: Response): Promise<T | null> {
   }
 }
 
+function isTelegramMiniApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean(window.Telegram?.WebApp);
+}
 
 function formatExperience(months: number) {
   if (months <= 0) {
@@ -134,7 +141,7 @@ function formatMatchStatus(status: string) {
 }
 
 function formatReadyToStart(value?: string | null) {
-  if (!value) {
+  if (!value?.trim()) {
     return "Не указано";
   }
 
@@ -153,6 +160,56 @@ function formatReadyToStart(value?: string | null) {
   };
 
   return map[normalized] || value;
+}
+
+function fitScoreLabel(score: number) {
+  if (score >= 80) {
+    return "Хорошее совпадение";
+  }
+  if (score >= 65) {
+    return "Подходит";
+  }
+  return "Есть шанс";
+}
+
+function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
+  let score = 40;
+
+  const candidateRole = candidate.primary_role.trim().toLowerCase();
+  const vacancyRole = vacancy.role.trim().toLowerCase();
+
+  if (candidateRole === vacancyRole) {
+    score += 25;
+  } else if (
+    candidateRole.includes(vacancyRole) ||
+    vacancyRole.includes(candidateRole)
+  ) {
+    score += 15;
+  }
+
+  if (candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()) {
+    score += 10;
+  }
+
+  if (
+    candidate.district &&
+    vacancy.district &&
+    candidate.district.trim().toLowerCase() === vacancy.district.trim().toLowerCase()
+  ) {
+    score += 10;
+  }
+
+  if (candidate.horeca_experience_months >= 12) {
+    score += 10;
+  } else if (candidate.horeca_experience_months > 0) {
+    score += 5;
+  }
+
+  if (candidate.ready_to_start?.trim()) {
+    score += 5;
+  }
+
+  return Math.min(score, 100);
 }
 
 function buildFitReasons(candidate: CandidateItem, vacancy: VacancyItem) {
@@ -230,6 +287,22 @@ function buildNextStepText(existingMatch: MatchItem | null) {
   }
 }
 
+function buildAfterApplySteps(existingMatch: MatchItem | null) {
+  if (existingMatch) {
+    return [
+      "Новый отклик создавать не нужно.",
+      "Текущий статус уже сохранен в системе.",
+      "Следить за изменениями лучше в разделе «Мои отклики».",
+    ];
+  }
+
+  return [
+    "Ваш отклик отправится работодателю.",
+    "Статус сразу появится в разделе «Мои отклики».",
+    "Если работодатель посмотрит вас или захочет связаться, это будет видно по статусу.",
+  ];
+}
+
 export default function CandidateVacancyDetailsPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -240,6 +313,7 @@ export default function CandidateVacancyDetailsPage() {
   const [applying, setApplying] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
+  const [isTelegram, setIsTelegram] = useState(false);
 
   const [candidate, setCandidate] = useState<CandidateItem | null>(null);
   const [vacancy, setVacancy] = useState<VacancyItem | null>(null);
@@ -307,6 +381,7 @@ export default function CandidateVacancyDetailsPage() {
   }
 
   useEffect(() => {
+    setIsTelegram(isTelegramMiniApp());
     void loadData();
   }, [vacancyId]);
 
@@ -317,6 +392,18 @@ export default function CandidateVacancyDetailsPage() {
 
     return buildFitReasons(candidate, vacancy);
   }, [candidate, vacancy]);
+
+  const fitScore = useMemo(() => {
+    if (!candidate || !vacancy) {
+      return 0;
+    }
+
+    return calculateFitScore(candidate, vacancy);
+  }, [candidate, vacancy]);
+
+  const afterApplySteps = useMemo(() => {
+    return buildAfterApplySteps(existingMatch);
+  }, [existingMatch]);
 
   async function applyToVacancy() {
     try {
@@ -406,7 +493,13 @@ export default function CandidateVacancyDetailsPage() {
   }
 
   if (loading) {
-    return <main className="px-4 py-6">Загрузка вакансии...</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка вакансии...
+        </div>
+      </main>
+    );
   }
 
   if (errorText && !vacancy) {
@@ -430,67 +523,83 @@ export default function CandidateVacancyDetailsPage() {
   }
 
   return (
-    <main className="space-y-5 px-4 py-5 md:space-y-6 md:py-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-violet-600">
-                Вакансия
-              </p>
+    <main className={`space-y-5 px-4 py-5 ${isTelegram ? "" : "md:space-y-6 md:py-6"}`}>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-violet-600">
+                  Вакансия
+                </p>
 
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-                {vacancy.role}
-              </h1>
+                <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+                  {vacancy.role}
+                </h1>
 
-              <div className="mt-1 text-sm text-slate-700">
-                {vacancy.venue_name}
+                <div className="mt-1 text-sm text-slate-700">
+                  {vacancy.venue_name}
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    {vacancy.city}
+                    {vacancy.district ? `, ${vacancy.district}` : ""}
+                  </span>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    Доход: {formatIncomeText(vacancy.salary_text)}
+                  </span>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    График: {vacancy.schedule_text || "Не указан"}
+                  </span>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    Выход: {formatReadyToStart(vacancy.needed_start)}
+                  </span>
+
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                    Статус: {formatVacancyStatus(vacancy.status)}
+                  </span>
+                </div>
+
+                <div className="mt-4 inline-flex rounded-full bg-violet-50 px-3 py-1 text-sm text-violet-700 ring-1 ring-violet-100">
+                  {fitScoreLabel(fitScore)} · {fitScore}
+                </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  {vacancy.city}
-                  {vacancy.district ? `, ${vacancy.district}` : ""}
-                </span>
+              <div className="flex w-full flex-col gap-3 md:w-[280px]">
+                <button
+                  type="button"
+                  onClick={() => void applyToVacancy()}
+                  disabled={applying || Boolean(existingMatch)}
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {existingMatch
+                    ? "Отклик уже есть"
+                    : applying
+                      ? "Отправляем..."
+                      : "Откликнуться"}
+                </button>
 
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  Доход: {formatIncomeText(vacancy.salary_text)}
-                </span>
-
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  График: {vacancy.schedule_text || "Не указан"}
-                </span>
-
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  Выход: {vacancy.needed_start || "Не указано"}
-                </span>
-
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                  Статус: {formatVacancyStatus(vacancy.status)}
-                </span>
+                <Link
+                  href="/candidate/vacancies"
+                  className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
+                >
+                  Назад к вакансиям
+                </Link>
               </div>
             </div>
 
-            <div className="flex w-full flex-col gap-3 md:w-[280px]">
-              <button
-                type="button"
-                onClick={() => void applyToVacancy()}
-                disabled={applying || Boolean(existingMatch)}
-                className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {existingMatch
-                  ? "Отклик уже есть"
-                  : applying
-                    ? "Отправляем..."
-                    : "Откликнуться"}
-              </button>
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Что делать сейчас
+              </div>
 
-              <Link
-                href="/candidate/vacancies"
-                className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
-              >
-                Назад к вакансиям
-              </Link>
+              <div className="mt-2 text-sm leading-6 text-slate-700">
+                {buildNextStepText(existingMatch)}
+              </div>
             </div>
           </div>
         </div>
@@ -565,11 +674,16 @@ export default function CandidateVacancyDetailsPage() {
 
           <div className="rounded-2xl bg-slate-50 p-4">
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-              Что делать дальше
+              Что система видит
             </div>
 
             <div className="mt-2 text-sm leading-6 text-slate-700">
-              {buildNextStepText(existingMatch)}
+              Система сопоставила ваш профиль с этой вакансией по роли, локации,
+              опыту и готовности выйти.
+            </div>
+
+            <div className="mt-3 text-sm font-medium text-slate-900">
+              Совпадение: {fitScoreLabel(fitScore)} · {fitScore}
             </div>
           </div>
         </div>
@@ -605,7 +719,7 @@ export default function CandidateVacancyDetailsPage() {
             </div>
             <div>
               <span className="font-medium text-slate-900">Когда нужен человек:</span>{" "}
-              {vacancy.needed_start || "Не указано"}
+              {formatReadyToStart(vacancy.needed_start)}
             </div>
             <div>
               <span className="font-medium text-slate-900">Статус вакансии:</span>{" "}
@@ -659,10 +773,9 @@ export default function CandidateVacancyDetailsPage() {
         </h2>
 
         <div className="mt-4 space-y-3 text-sm leading-6 text-slate-600">
-          <div>1. Ваш отклик отправится работодателю.</div>
-          <div>2. Статус появится в разделе «Мои отклики».</div>
-          <div>3. Если работодатель посмотрит отклик, вы это увидите.</div>
-          <div>4. Если по вам будет интерес, это тоже станет видно в статусе.</div>
+          {afterApplySteps.map((step) => (
+            <div key={step}>{step}</div>
+          ))}
         </div>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
