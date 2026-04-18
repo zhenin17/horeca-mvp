@@ -130,6 +130,10 @@ export default function EmployerOnboardingPage() {
 
       setSuccessText("Работодатель сохранен");
 
+      if (typeof window !== "undefined" && data?.id) {
+        window.localStorage.setItem("hubsty_employer_id", String(data.id));
+      }
+      
       setTimeout(() => {
         router.push(`/employer/${data.id}/create-vacancies`);
       }, 700);

@@ -1,33 +1,131 @@
+"use client";
+
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
+
+function topNavClass(isActive: boolean) {
+  return isActive
+    ? "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+    : "rounded-full px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900";
+}
+
+function bottomNavClass(isActive: boolean) {
+  return isActive
+    ? "flex h-12 min-w-0 flex-1 items-center justify-center rounded-2xl bg-slate-900 px-3 text-sm font-semibold text-white shadow-sm"
+    : "flex h-12 min-w-0 flex-1 items-center justify-center rounded-2xl bg-white px-3 text-sm font-medium text-slate-600";
+}
+
+function detectTelegramWebApp() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const w = window as typeof window & {
+    Telegram?: {
+      WebApp?: {
+        initData?: string;
+      };
+    };
+  };
+
+  return Boolean(w.Telegram?.WebApp?.initData?.trim());
+}
 
 export default function EmployerLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  return (
-    <div>
-      <div className="border-b border-slate-200 bg-slate-50">
-        <div className="space-y-2 px-4 py-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            Работодатель
-          </div>
-          <nav className="flex flex-wrap items-center gap-4 text-sm">
-            <Link href="/employer/start" className="font-medium hover:text-slate-600">
-              Старт
-            </Link>
-            <Link href="/employer/onboarding" className="font-medium hover:text-slate-600">
-              Анкета
-            </Link>
-            <Link href="/employer/list" className="font-medium hover:text-slate-600">
-              Работодатели
-            </Link>
-          </nav>
-        </div>
-      </div>
+  const pathname = usePathname();
 
-      {children}
+  const [mounted, setMounted] = useState(false);
+  const [isTelegram, setIsTelegram] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    setIsTelegram(detectTelegramWebApp());
+  }, []);
+
+  const isStart = pathname === "/employer/start";
+  const isOnboarding = pathname.startsWith("/employer/onboarding");
+  const isDashboard =
+    /^\/employer\/\d+$/.test(pathname) || pathname.includes("/create-vacancies");
+  const isList = pathname.startsWith("/employer/list");
+
+  const showTelegramUi = mounted && isTelegram;
+
+  return (
+    <div className={showTelegramUi ? "overflow-x-hidden pb-28" : "overflow-x-hidden"}>
+      {!showTelegramUi ? (
+        <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="px-4 py-3">
+            <div className="mb-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                Работодатель
+              </div>
+              <div className="mt-1 text-sm text-slate-600">
+                Понятный путь: профиль → вакансии → кандидаты
+              </div>
+            </div>
+
+            <nav className="flex flex-wrap gap-2">
+              <Link href="/employer/start" className={topNavClass(isStart)}>
+                Старт
+              </Link>
+
+              <Link href="/employer/onboarding" className={topNavClass(isOnboarding)}>
+                Анкета
+              </Link>
+
+              <Link href="/employer/list" className={topNavClass(isList)}>
+                Список
+              </Link>
+
+              <Link href="/telegram" className={topNavClass(false)}>
+                Роли
+              </Link>
+            </nav>
+          </div>
+        </div>
+      ) : (
+        <div className="border-b border-slate-200 bg-white">
+          <div className="px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              Hubsty · Работодатель
+            </div>
+            <div className="mt-1 text-sm text-slate-600">
+              Профиль, вакансии и кандидаты — без перегруза
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-hidden">{children}</div>
+
+      {showTelegramUi ? (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto w-full max-w-md px-3 pt-3 [padding-bottom:calc(env(safe-area-inset-bottom)+12px)]">
+            <nav className="flex items-center gap-2">
+              <Link href="/employer/start" className={bottomNavClass(isStart)}>
+                Старт
+              </Link>
+
+              <Link href="/employer/onboarding" className={bottomNavClass(isOnboarding)}>
+                Анкета
+              </Link>
+
+              <Link href="/employer/list" className={bottomNavClass(isList)}>
+                Список
+              </Link>
+
+              <Link href="/telegram" className={bottomNavClass(false)}>
+                Роли
+              </Link>
+            </nav>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

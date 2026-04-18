@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { getCurrentEmployerId } from "@/lib/current-user";
 
 type EmployerItem = {
   id: number;
@@ -106,7 +107,7 @@ function matchStatusLabel(status: string) {
     case "offered":
       return "Есть предложение";
     case "hired":
-      return "Вас приняли";
+      return "Принят";
     case "rejected":
       return "Не подошел";
     case "no_show":
@@ -241,7 +242,7 @@ function getAvailableActions(status: string): MatchAction[] {
       return [
         {
           key: "hire",
-          label: "Вас приняли",
+          label: "Принять",
           endpoint: "hire",
           successText: "Кандидат отмечен как принятый",
         },
@@ -415,6 +416,13 @@ export default function EmployerDashboardPage() {
         throw new Error("Работодатель не найден");
       }
 
+      if (typeof window !== "undefined") {
+        const storedEmployerId = getCurrentEmployerId();
+        if (storedEmployerId !== employerId) {
+          window.localStorage.setItem("hubsty_employer_id", String(employerId));
+        }
+      }
+
       const employerVacancies = vacanciesData
         .filter((item) => item.employer_id === employerId)
         .sort((a, b) => b.id - a.id);
@@ -482,6 +490,10 @@ export default function EmployerDashboardPage() {
       return;
     }
 
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hubsty_employer_id", String(employerId));
+    }
+
     void loadPageData();
   }, [employerId]);
 
@@ -499,7 +511,6 @@ export default function EmployerDashboardPage() {
       const finishedCount = vacancyMatches.filter((item) =>
         ["hired", "rejected", "no_show"].includes(item.status)
       ).length;
-      const hiredCount = vacancyMatches.filter((item) => item.status === "hired").length;
 
       return {
         ...vacancy,
@@ -507,7 +518,6 @@ export default function EmployerDashboardPage() {
         newCount,
         inWorkCount,
         finishedCount,
-        hiredCount,
       };
     });
   }, [vacancies, matches]);
@@ -556,18 +566,18 @@ export default function EmployerDashboardPage() {
       setBusyMatchId(matchId);
       setMessageText("");
       setErrorText("");
-  
+
       const response = await fetch(`/api/matches/${matchId}/${endpoint}`, {
         method: "POST",
       });
-  
+
       const text = await response.text();
       const data = text ? JSON.parse(text) : null;
-  
+
       if (!response.ok) {
         throw new Error(data?.detail || "Не удалось изменить статус");
       }
-  
+
       if (endpoint === "invite") {
         setCandidateFilter("in_work");
         setMessageText("Кандидат приглашен. Контакты открыты.");
@@ -584,7 +594,7 @@ export default function EmployerDashboardPage() {
       } else {
         setMessageText(successText);
       }
-  
+
       await loadPageData();
     } catch (error) {
       console.error(error);
@@ -599,13 +609,19 @@ export default function EmployerDashboardPage() {
   }
 
   if (loading) {
-    return <main className="px-4 py-6">Загрузка кабинета работодателя...</main>;
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка кабинета работодателя...
+        </div>
+      </main>
+    );
   }
 
   if (errorText && !employer) {
     return (
       <main className="px-4 py-6">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
         </div>
       </main>
@@ -615,7 +631,7 @@ export default function EmployerDashboardPage() {
   if (!employer) {
     return (
       <main className="px-4 py-6">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
           Работодатель не найден.
         </div>
       </main>
@@ -624,11 +640,47 @@ export default function EmployerDashboardPage() {
 
   return (
     <main className="space-y-6 px-4 py-6">
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div>
-            <p className="text-sm text-slate-500">Кабинет работодателя</p>
-            <h1 className="mt-2 text-2xl font-semibold">{employer.company_name}</h1>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-sm font-medium text-slate-500">Кабинет работодателя</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                {employer.company_name}
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Здесь собраны ваши вакансии, кандидаты и все ключевые действия по воронке.
+              </p>
+
+              <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
+                {employer.city}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/employer/${employer.id}/create-vacancies`}
+                className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                Создать вакансию
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadPageData();
+                }}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Обновить
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Контактные данные
+            </div>
+
             <div className="mt-3 space-y-1 text-sm text-slate-600">
               <div>Контакт: {employer.contact_name}</div>
               <div>Телефон: {employer.phone}</div>
@@ -639,74 +691,64 @@ export default function EmployerDashboardPage() {
               {employer.website ? <div>Сайт: {employer.website}</div> : null}
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href={`/employer/${employer.id}/create-vacancies`}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              Создать вакансию
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                void loadPageData();
-              }}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              Обновить
-            </button>
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">Активные вакансии</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {dashboardStats.activeVacancies}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">Новые кандидаты</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {dashboardStats.newCandidates}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">В работе</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {dashboardStats.inWorkCandidates}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="text-xs text-slate-500">Приняты</div>
+          <div className="mt-2 text-2xl font-semibold text-slate-900">
+            {dashboardStats.hiredCandidates}
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">Активные вакансии</div>
-          <div className="mt-2 text-2xl font-semibold">{dashboardStats.activeVacancies}</div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">Новые кандидаты</div>
-          <div className="mt-2 text-2xl font-semibold">{dashboardStats.newCandidates}</div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">В работе</div>
-          <div className="mt-2 text-2xl font-semibold">{dashboardStats.inWorkCandidates}</div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 p-4 shadow-sm">
-          <div className="text-sm text-slate-500">Приняты</div>
-          <div className="mt-2 text-2xl font-semibold">{dashboardStats.hiredCandidates}</div>
-        </div>
-      </section>
-
       {messageText ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
           {messageText}
         </div>
       ) : null}
 
       {errorText ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold">Мои вакансии</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Мои вакансии</h2>
           <Link
             href={`/employer/${employer.id}/create-vacancies`}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Добавить вакансию
           </Link>
         </div>
 
         {vacanciesWithStats.length === 0 ? (
-          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
             У работодателя пока нет вакансий.
           </div>
         ) : (
@@ -720,17 +762,17 @@ export default function EmployerDashboardPage() {
                   key={vacancy.id}
                   type="button"
                   onClick={() => setSelectedVacancyId(vacancy.id)}
-                  className={`w-full rounded-xl border p-4 text-left transition ${
+                  className={`w-full rounded-2xl border p-4 text-left transition ${
                     isSelected
                       ? "border-slate-900 bg-slate-50"
                       : needsAttention
                         ? "border-amber-300 bg-amber-50 hover:bg-amber-100"
-                        : "border-slate-200 hover:bg-slate-50"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
-                      <div className="font-medium">
+                      <div className="font-medium text-slate-900">
                         {vacancy.role} · {vacancy.venue_name}
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
@@ -775,16 +817,16 @@ export default function EmployerDashboardPage() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         {!selectedVacancy ? (
-          <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
             Выберите вакансию, чтобы посмотреть кандидатов.
           </div>
         ) : (
           <>
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-xl font-semibold">
+                <h2 className="text-xl font-semibold text-slate-900">
                   Кандидаты по вакансии: {selectedVacancy.role}
                 </h2>
                 <div className="mt-2 space-y-1 text-sm text-slate-600">
@@ -804,10 +846,10 @@ export default function EmployerDashboardPage() {
                     key={item}
                     type="button"
                     onClick={() => setCandidateFilter(item)}
-                    className={`rounded-xl border px-3 py-2 text-sm ${
+                    className={`rounded-2xl border px-3 py-2 text-sm ${
                       candidateFilter === item
                         ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-300 hover:bg-slate-50"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                     }`}
                   >
                     {item === "new"
@@ -823,7 +865,7 @@ export default function EmployerDashboardPage() {
             </div>
 
             {selectedVacancyMatches.length === 0 ? (
-              <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
                 По выбранному фильтру кандидатов пока нет.
               </div>
             ) : (
@@ -842,11 +884,13 @@ export default function EmployerDashboardPage() {
                   return (
                     <div
                       key={match.id}
-                      className="rounded-xl border border-slate-200 p-4"
+                      className="rounded-2xl border border-slate-200 bg-white p-4"
                     >
                       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                         <div className="space-y-3">
-                          <div className="font-medium">{match.candidate.full_name}</div>
+                          <div className="font-medium text-slate-900">
+                            {match.candidate.full_name}
+                          </div>
 
                           <div className="text-sm text-slate-600">
                             Роль: {match.candidate.primary_role}
@@ -901,7 +945,7 @@ export default function EmployerDashboardPage() {
                           </div>
 
                           {contactsOpened ? (
-                            <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">
+                            <div className="rounded-2xl bg-emerald-50 p-3 text-sm text-emerald-800">
                               <div>Телефон: {match.candidate.phone}</div>
                               {match.candidate.telegram_username ? (
                                 <div className="mt-1">
@@ -914,7 +958,7 @@ export default function EmployerDashboardPage() {
                               )}
                             </div>
                           ) : (
-                            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                            <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
                               Контакты откроются после приглашения кандидата.
                             </div>
                           )}
@@ -928,7 +972,7 @@ export default function EmployerDashboardPage() {
 
                         <div className="md:max-w-[320px]">
                           {actions.length === 0 ? (
-                            <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                            <div className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">
                               Для текущего статуса больше нет доступных действий.
                             </div>
                           ) : (
@@ -945,7 +989,7 @@ export default function EmployerDashboardPage() {
                                       action.successText
                                     )
                                   }
-                                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  className="rounded-2xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                   {busyMatchId === match.id ? "Сохраняем..." : action.label}
                                 </button>

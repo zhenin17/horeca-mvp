@@ -126,22 +126,24 @@ export default function TelegramEntryPage() {
     if (typeof window === "undefined") {
       return;
     }
-
+  
     const data = authData || telegramUser;
     if (!data) {
       return;
     }
-
+  
     window.localStorage.setItem("hubsty_active_role", role);
-
+  
     if (role === "candidate" && data.candidate_id) {
       window.localStorage.setItem("hubsty_candidate_id", String(data.candidate_id));
       window.location.href = "/candidate/vacancies";
       return;
     }
-
+  
     if (role === "employer" && data.employer_id) {
+      window.localStorage.setItem("hubsty_employer_id", String(data.employer_id));
       window.location.href = `/employer/${data.employer_id}`;
+      return;
     }
   }
 

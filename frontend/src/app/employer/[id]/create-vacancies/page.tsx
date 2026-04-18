@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type VacancyForm = {
   role: string;
@@ -35,6 +35,14 @@ function validateForm(form: VacancyForm): FieldErrors {
   return errors;
 }
 
+function inputClass(hasError?: boolean) {
+  return `w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${
+    hasError
+      ? "border-red-300 bg-red-50 focus:border-red-400"
+      : "border-slate-300 bg-white focus:border-slate-900"
+  }`;
+}
+
 export default function EmployerCreateVacancyPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -58,6 +66,12 @@ export default function EmployerCreateVacancyPage() {
   const [saving, setSaving] = useState(false);
 
   const isEmployerIdValid = useMemo(() => Number.isFinite(employerId), [employerId]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && Number.isFinite(employerId)) {
+      window.localStorage.setItem("hubsty_employer_id", String(employerId));
+    }
+  }, [employerId]);
 
   function updateField<K extends keyof VacancyForm>(key: K, value: VacancyForm[K]) {
     setForm((prev) => ({
@@ -130,14 +144,14 @@ export default function EmployerCreateVacancyPage() {
           data?.message ||
           text ||
           `Не удалось создать вакансию (${response.status})`;
-      
+
         console.error("create vacancy failed", {
           status: response.status,
           contentType: response.headers.get("content-type"),
           text,
           data,
         });
-      
+
         throw new Error(backendMessage);
       }
 
@@ -162,7 +176,7 @@ export default function EmployerCreateVacancyPage() {
   if (!isEmployerIdValid) {
     return (
       <main className="px-4 py-6">
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           Некорректный идентификатор работодателя
         </div>
       </main>
@@ -171,48 +185,68 @@ export default function EmployerCreateVacancyPage() {
 
   return (
     <main className="space-y-6 px-4 py-6">
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-500">Работодатель</p>
-            <h1 className="mt-2 text-2xl font-semibold">Создать вакансию</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Заполни основные поля, чтобы вакансия появилась в кабинете работодателя и в админке.
-            </p>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5 md:p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div className="max-w-2xl">
+              <p className="text-sm font-medium text-slate-500">Работодатель</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                Создать вакансию
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Заполни основные поля, чтобы вакансия появилась в кабинете работодателя
+                и сразу вошла в рабочую воронку кандидатов.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/employer/${employerId}`}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Назад в кабинет
+              </Link>
+            </div>
           </div>
 
-          <Link
-            href={`/employer/${employerId}`}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-          >
-            Назад
-          </Link>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Что важно
+            </div>
+
+            <div className="mt-2 text-lg font-semibold text-slate-900">
+              Сначала базовые данные, потом можно дополнять
+            </div>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Для старта достаточно роли, точки и города. Остальные поля помогут
+              кандидатам быстрее понять, подходит ли им вакансия.
+            </p>
+          </div>
         </div>
       </section>
 
       {errorText ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
         </div>
       ) : null}
 
       {successText ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
           {successText}
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium">Роль *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Роль *</label>
             <input
               value={form.role}
               onChange={(e) => updateField("role", e.target.value)}
               placeholder="Например, бариста"
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.role ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.role))}
             />
             {fieldErrors.role ? (
               <div className="mt-1 text-sm text-red-600">{fieldErrors.role}</div>
@@ -220,14 +254,14 @@ export default function EmployerCreateVacancyPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Название точки *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Название точки *
+            </label>
             <input
               value={form.venue_name}
               onChange={(e) => updateField("venue_name", e.target.value)}
               placeholder="Например, Coffee Stories"
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.venue_name ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.venue_name))}
             />
             {fieldErrors.venue_name ? (
               <div className="mt-1 text-sm text-red-600">{fieldErrors.venue_name}</div>
@@ -235,14 +269,12 @@ export default function EmployerCreateVacancyPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Город *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Город *</label>
             <input
               value={form.city}
               onChange={(e) => updateField("city", e.target.value)}
               placeholder="Например, Санкт-Петербург"
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.city ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.city))}
             />
             {fieldErrors.city ? (
               <div className="mt-1 text-sm text-red-600">{fieldErrors.city}</div>
@@ -250,51 +282,57 @@ export default function EmployerCreateVacancyPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Район</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Район</label>
             <input
               value={form.district}
               onChange={(e) => updateField("district", e.target.value)}
               placeholder="Например, Центральный"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Доход / ставка</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Доход / ставка
+            </label>
             <input
               value={form.salary_text}
               onChange={(e) => updateField("salary_text", e.target.value)}
               placeholder="Например, 4500 за смену"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">График</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">График</label>
             <input
               value={form.schedule_text}
               onChange={(e) => updateField("schedule_text", e.target.value)}
               placeholder="Например, 2/2"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Когда нужен человек</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Когда нужен человек
+            </label>
             <input
               value={form.needed_start}
               onChange={(e) => updateField("needed_start", e.target.value)}
               placeholder="Например, завтра"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Статус вакансии</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Статус вакансии
+            </label>
             <select
               value={form.status}
               onChange={(e) => updateField("status", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
             >
               <option value="new">Новая</option>
               <option value="in_progress">В работе</option>
@@ -309,14 +347,14 @@ export default function EmployerCreateVacancyPage() {
             type="button"
             onClick={() => void saveVacancy()}
             disabled={saving}
-            className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? "Сохраняем..." : "Создать вакансию"}
           </button>
 
           <Link
             href={`/employer/${employerId}`}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Отмена
           </Link>
