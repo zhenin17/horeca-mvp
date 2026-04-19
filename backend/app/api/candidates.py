@@ -4,6 +4,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.models.candidate import Candidate
 from app.models.candidate_photo import CandidatePhoto
@@ -120,6 +121,14 @@ def add_candidate_photo(candidate_id: int, payload: CandidatePhotoCreate, db: Se
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
+    existing_count = (
+        db.query(CandidatePhoto)
+        .filter(CandidatePhoto.candidate_id == candidate_id)
+        .count()
+    )
+    if existing_count >= 1:
+        raise HTTPException(status_code=400, detail="Only 1 photo is allowed for this candidate")
+
     if payload.is_cover:
         (
             db.query(CandidatePhoto)
@@ -154,6 +163,14 @@ async def upload_candidate_photo(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File name is empty")
 
+    existing_count = (
+        db.query(CandidatePhoto)
+        .filter(CandidatePhoto.candidate_id == candidate_id)
+        .count()
+    )
+    if existing_count >= 1:
+        raise HTTPException(status_code=400, detail="Only 1 photo is allowed for this candidate")
+
     allowed_types = {"image/jpeg", "image/png", "image/webp", "image/jpg"}
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP are allowed")
@@ -168,6 +185,13 @@ async def upload_candidate_photo(
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    max_size_bytes = settings.max_upload_size_mb * 1024 * 1024
+    if len(content) > max_size_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File is too large. Max size is {settings.max_upload_size_mb} MB",
+        )
 
     with open(file_path, "wb") as f:
         f.write(content)

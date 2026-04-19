@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     app_name: str = "HoReCa MVP API"
     app_env: str = "development"
     app_debug: bool = True
+    enable_docs: bool = True
+    max_upload_size_mb: int = 5
 
     postgres_host: str
     postgres_port: int = 5432
