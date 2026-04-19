@@ -1,17 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
 from app.models.candidate import Candidate
+from app.models.candidate_photo import CandidatePhoto
 from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
-from app.schemas.candidate import CandidateCreate, CandidateRead
+from app.schemas.candidate import (
+    CandidateCreate,
+    CandidatePhotoCreate,
+    CandidatePhotoRead,
+    CandidateRead,
+)
 from app.schemas.candidate_dashboard import CandidateDashboardRead
 from app.schemas.reliability import CandidateReliabilityRead
 from app.services.reliability import calculate_candidate_reliability
 from app.services.scoring import calculate_final_match_score
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+UPLOADS_DIR = BASE_DIR / "uploads"
+CANDIDATE_UPLOADS_DIR = UPLOADS_DIR / "candidates"
 
 
 @router.post("/", response_model=CandidateRead)
@@ -30,17 +43,32 @@ def create_candidate(payload: CandidateCreate, db: Session = Depends(get_db)):
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
-    return candidate
+    return (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .filter(Candidate.id == candidate.id)
+        .first()
+    )
 
 
 @router.get("/", response_model=list[CandidateRead])
 def list_candidates(db: Session = Depends(get_db)):
-    return db.query(Candidate).order_by(Candidate.id.desc()).all()
+    return (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .order_by(Candidate.id.desc())
+        .all()
+    )
 
 
 @router.get("/{candidate_id}", response_model=CandidateRead)
 def get_candidate(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    candidate = (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .filter(Candidate.id == candidate_id)
+        .first()
+    )
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
     return candidate
@@ -63,8 +91,128 @@ def update_candidate(candidate_id: int, payload: CandidateCreate, db: Session = 
     candidate.expected_income = payload.expected_income
 
     db.commit()
-    db.refresh(candidate)
-    return candidate
+
+    return (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .filter(Candidate.id == candidate_id)
+        .first()
+    )
+
+
+@router.get("/{candidate_id}/photos", response_model=list[CandidatePhotoRead])
+def list_candidate_photos(candidate_id: int, db: Session = Depends(get_db)):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return (
+        db.query(CandidatePhoto)
+        .filter(CandidatePhoto.candidate_id == candidate_id)
+        .order_by(CandidatePhoto.is_cover.desc(), CandidatePhoto.sort_order.asc(), CandidatePhoto.id.asc())
+        .all()
+    )
+
+
+@router.post("/{candidate_id}/photos", response_model=CandidatePhotoRead)
+def add_candidate_photo(candidate_id: int, payload: CandidatePhotoCreate, db: Session = Depends(get_db)):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if payload.is_cover:
+        (
+            db.query(CandidatePhoto)
+            .filter(CandidatePhoto.candidate_id == candidate_id)
+            .update({"is_cover": False}, synchronize_session=False)
+        )
+
+    photo = CandidatePhoto(
+        candidate_id=candidate_id,
+        photo_url=payload.photo_url,
+        sort_order=payload.sort_order,
+        is_cover=payload.is_cover,
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+@router.post("/{candidate_id}/photos/upload", response_model=CandidatePhotoRead)
+async def upload_candidate_photo(
+    candidate_id: int,
+    file: UploadFile = File(...),
+    is_cover: bool = False,
+    sort_order: int = 0,
+    db: Session = Depends(get_db),
+):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File name is empty")
+
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/jpg"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP are allowed")
+
+    candidate_dir = CANDIDATE_UPLOADS_DIR / str(candidate_id)
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+
+    ext = Path(file.filename).suffix.lower() or ".jpg"
+    filename = f"{uuid4().hex}{ext}"
+    file_path = candidate_dir / filename
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    photo_url = f"/uploads/candidates/{candidate_id}/{filename}"
+
+    if is_cover:
+        (
+            db.query(CandidatePhoto)
+            .filter(CandidatePhoto.candidate_id == candidate_id)
+            .update({"is_cover": False}, synchronize_session=False)
+        )
+
+    photo = CandidatePhoto(
+        candidate_id=candidate_id,
+        photo_url=photo_url,
+        sort_order=sort_order,
+        is_cover=is_cover,
+    )
+    db.add(photo)
+    db.commit()
+    db.refresh(photo)
+    return photo
+
+
+@router.delete("/{candidate_id}/photos/{photo_id}")
+def delete_candidate_photo(candidate_id: int, photo_id: int, db: Session = Depends(get_db)):
+    photo = (
+        db.query(CandidatePhoto)
+        .filter(CandidatePhoto.id == photo_id)
+        .filter(CandidatePhoto.candidate_id == candidate_id)
+        .first()
+    )
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    if photo.photo_url.startswith("/uploads/"):
+        relative_path = photo.photo_url.removeprefix("/uploads/")
+        file_path = UPLOADS_DIR / relative_path
+        if file_path.exists() and file_path.is_file():
+            file_path.unlink()
+
+    db.delete(photo)
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/{candidate_id}/matches")

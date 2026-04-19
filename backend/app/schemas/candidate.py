@@ -1,5 +1,23 @@
-from pydantic import BaseModel
 from typing import Optional
+
+from pydantic import BaseModel
+
+
+class CandidatePhotoCreate(BaseModel):
+    photo_url: str
+    sort_order: int = 0
+    is_cover: bool = False
+
+
+class CandidatePhotoRead(BaseModel):
+    id: int
+    candidate_id: int
+    photo_url: str
+    sort_order: int
+    is_cover: bool
+
+    class Config:
+        from_attributes = True
 
 
 class CandidateCreate(BaseModel):
@@ -26,6 +44,7 @@ class CandidateRead(BaseModel):
     ready_to_start: str
     expected_income: Optional[str] = None
     is_active: bool
+    photos: list[CandidatePhotoRead] = []
 
     class Config:
         from_attributes = True

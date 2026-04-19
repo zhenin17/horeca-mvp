@@ -38,3 +38,9 @@ class Candidate(Base):
 
     matches = relationship("VacancyCandidateMatch", back_populates="candidate")
     funnel_events = relationship("FunnelEvent", back_populates="candidate")
+    photos = relationship(
+        "CandidatePhoto",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        order_by="CandidatePhoto.sort_order.asc()",
+    )
