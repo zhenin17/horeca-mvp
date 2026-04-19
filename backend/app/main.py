@@ -14,11 +14,7 @@ from app.api.vacancy_candidate_matches import router as matches_router
 from app.core.config import settings
 from app.core.db import check_db_connection
 
-app = FastAPI(
-    title=settings.app_name,
-    docs_url="/api/docs/",
-    openapi_url="/api/openapi.json/",
-)
+app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
