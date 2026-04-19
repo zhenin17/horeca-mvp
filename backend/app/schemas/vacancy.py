@@ -3,6 +3,23 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class VacancyPhotoCreate(BaseModel):
+    photo_url: str
+    sort_order: int = 0
+    is_cover: bool = False
+
+
+class VacancyPhotoRead(BaseModel):
+    id: int
+    vacancy_id: int
+    photo_url: str
+    sort_order: int
+    is_cover: bool
+
+    class Config:
+        from_attributes = True
+
+
 class VacancyCreate(BaseModel):
     employer_id: int
     role: str
@@ -42,6 +59,7 @@ class VacancyRead(BaseModel):
     slots_count: Optional[int] = None
 
     status: str
+    photos: list[VacancyPhotoRead] = []
 
     class Config:
         from_attributes = True

@@ -3,6 +3,7 @@ from app.models.employer import Employer
 from app.models.funnel_event import FunnelEvent
 from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
+from app.models.vacancy_photo import VacancyPhoto
 
 __all__ = [
     "Candidate",
@@ -10,4 +11,5 @@ __all__ = [
     "Vacancy",
     "FunnelEvent",
     "VacancyCandidateMatch",
+    "VacancyPhoto",
 ]
