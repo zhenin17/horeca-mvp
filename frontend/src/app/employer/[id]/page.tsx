@@ -377,6 +377,7 @@ function candidateFilterHint(filter: CandidateFilter) {
       return "";
   }
 }
+
 function vacancyTypeFilterLabel(filter: VacancyTypeFilter) {
   switch (filter) {
     case "job":
@@ -634,6 +635,17 @@ function formatShiftTimeLine(vacancy?: VacancyItem | null) {
   return date;
 }
 
+function getSelectedVacancyActionHint(status: string) {
+  switch (status) {
+    case "closed":
+      return "Вакансия закрыта. Ее можно вернуть в работу или отправить в архив.";
+    case "archived":
+      return "Вакансия в архиве. Ее можно вернуть в работу.";
+    default:
+      return "Сначала выберите действие по вакансии, затем разбирайте кандидатов ниже.";
+  }
+}
+
 export default function EmployerDashboardPage() {
   const params = useParams<{ id: string }>();
   const employerId = Number(params?.id);
@@ -646,11 +658,12 @@ export default function EmployerDashboardPage() {
   const [vacancies, setVacancies] = useState<VacancyItem[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [selectedVacancyId, setSelectedVacancyId] = useState<number | null>(null);
-const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>("new");
-const [vacancyTypeFilter, setVacancyTypeFilter] =
-  useState<VacancyTypeFilter>("all");
-const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
-const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
+  const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>("new");
+  const [vacancyTypeFilter, setVacancyTypeFilter] =
+    useState<VacancyTypeFilter>("all");
+  const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
+  const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
+
   const [reliabilityByCandidateId, setReliabilityByCandidateId] = useState<
     Record<number, CandidateReliability>
   >({});
@@ -773,38 +786,39 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
     return vacancies
       .filter((vacancy) => belongsToVacancyTypeFilter(vacancy, vacancyTypeFilter))
       .map((vacancy) => {
-      const vacancyMatches = matches.filter((item) => item.vacancy_id === vacancy.id);
+        const vacancyMatches = matches.filter((item) => item.vacancy_id === vacancy.id);
 
-      const totalCount = vacancyMatches.length;
-      const newCount = vacancyMatches.filter((item) =>
-        ["shortlist", "sent", "viewed"].includes(item.status)
-      ).length;
-      const inWorkCount = vacancyMatches.filter((item) =>
-        ["invited", "interviewed", "offered"].includes(item.status)
-      ).length;
-      const finishedCount = vacancyMatches.filter((item) =>
-        ["hired", "rejected", "no_show"].includes(item.status)
-      ).length;
+        const totalCount = vacancyMatches.length;
+        const newCount = vacancyMatches.filter((item) =>
+          ["shortlist", "sent", "viewed"].includes(item.status)
+        ).length;
+        const inWorkCount = vacancyMatches.filter((item) =>
+          ["invited", "interviewed", "offered"].includes(item.status)
+        ).length;
+        const finishedCount = vacancyMatches.filter((item) =>
+          ["hired", "rejected", "no_show"].includes(item.status)
+        ).length;
 
-      return {
-        ...vacancy,
-        totalCount,
-        newCount,
-        inWorkCount,
-        finishedCount,
-      };
-    });
+        return {
+          ...vacancy,
+          totalCount,
+          newCount,
+          inWorkCount,
+          finishedCount,
+        };
+      });
   }, [vacancies, matches, vacancyTypeFilter]);
 
   const selectedVacancy = useMemo(() => {
     return vacanciesWithStats.find((item) => item.id === selectedVacancyId) || null;
   }, [vacanciesWithStats, selectedVacancyId]);
+
   useEffect(() => {
     if (vacanciesWithStats.length === 0) {
       setSelectedVacancyId(null);
       return;
     }
-  
+
     if (
       !selectedVacancyId ||
       !vacanciesWithStats.some((item) => item.id === selectedVacancyId)
@@ -812,6 +826,7 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
       setSelectedVacancyId(vacanciesWithStats[0].id);
     }
   }, [vacanciesWithStats, selectedVacancyId]);
+
   const selectedVacancyMatches = useMemo(() => {
     const filtered = matches
       .filter((item) => item.vacancy_id === selectedVacancyId)
@@ -909,6 +924,7 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
       setBusyMatchId(null);
     }
   }
+
   async function runVacancyAction(
     vacancyId: number,
     endpoint: "close" | "archive" | "reopen",
@@ -918,18 +934,18 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
       setBusyVacancyId(vacancyId);
       setMessageText("");
       setErrorText("");
-  
+
       const response = await fetch(`/api/vacancies/${vacancyId}/${endpoint}`, {
         method: "POST",
       });
-  
+
       const text = await response.text();
       const data = text ? JSON.parse(text) : null;
-  
+
       if (!response.ok) {
         throw new Error(data?.detail || "Не удалось изменить статус вакансии");
       }
-  
+
       setMessageText(successText);
       await loadPageData();
     } catch (error) {
@@ -943,6 +959,7 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
       setBusyVacancyId(null);
     }
   }
+
   if (loading) {
     return (
       <main className="px-4 py-6">
@@ -1086,40 +1103,47 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
       ) : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4">
-  <div className="flex items-center justify-between gap-4">
-    <h2 className="text-xl font-semibold text-slate-900">Мои вакансии</h2>
-    <Link
-      href={`/employer/${employer.id}/create-vacancies`}
-      className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-    >
-      Добавить вакансию
-    </Link>
-  </div>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">1. Выберите вакансию</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Сначала выберите нужную вакансию из списка. После выбора ниже сразу
+                откроется блок с ее действиями и кандидатами.
+              </p>
+            </div>
 
-  <div>
-    <div className="flex flex-wrap gap-2">
-      {(["all", "job", "part_time", "shift"] as VacancyTypeFilter[]).map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => setVacancyTypeFilter(item)}
-          className={`rounded-2xl border px-3 py-2 text-sm ${
-            vacancyTypeFilter === item
-              ? "border-violet-600 bg-violet-600 text-white"
-              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
-        >
-          {vacancyTypeFilterLabel(item)}
-        </button>
-      ))}
-    </div>
+            <Link
+              href={`/employer/${employer.id}/create-vacancies`}
+              className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Добавить вакансию
+            </Link>
+          </div>
 
-    <div className="mt-3 text-sm text-slate-500">
-      {vacancyTypeFilterHint(vacancyTypeFilter)}
-    </div>
-  </div>
-</div>
+          <div>
+            <div className="flex flex-wrap gap-2">
+              {(["all", "job", "part_time", "shift"] as VacancyTypeFilter[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setVacancyTypeFilter(item)}
+                  className={`rounded-2xl border px-3 py-2 text-sm ${
+                    vacancyTypeFilter === item
+                      ? "border-violet-600 bg-violet-600 text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {vacancyTypeFilterLabel(item)}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 text-sm text-slate-500">
+              {vacancyTypeFilterHint(vacancyTypeFilter)}
+            </div>
+          </div>
+        </div>
 
         {vacanciesWithStats.length === 0 ? (
           <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
@@ -1140,7 +1164,7 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
                   onClick={() => setSelectedVacancyId(vacancy.id)}
                   className={`w-full overflow-hidden rounded-3xl border text-left transition ${
                     isSelected
-                      ? "border-slate-900 bg-slate-50 shadow-sm"
+                      ? "border-violet-600 bg-violet-50 shadow-sm"
                       : needsAttention
                         ? "border-amber-300 bg-white shadow-sm hover:shadow-md"
                         : "border-slate-200 bg-white shadow-sm hover:shadow-md"
@@ -1171,6 +1195,12 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
                           {needsAttention ? (
                             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
                               Требуют внимания: {vacancy.newCount} новых
+                            </span>
+                          ) : null}
+
+                          {isSelected ? (
+                            <span className="rounded-full bg-violet-600 px-3 py-1 text-xs font-medium text-white">
+                              Выбрана
                             </span>
                           ) : null}
                         </div>
@@ -1237,330 +1267,380 @@ const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-  {!selectedVacancy ? (
-    <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-      Выберите вакансию, чтобы посмотреть кандидатов.
-    </div>
-  ) : (
-    <>
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
-                selectedVacancy.listing_type
-              )}`}
-            >
-              {getListingTypeLabel(selectedVacancy.listing_type)}
-            </span>
-
-            {selectedVacancy.urgent_flag ? (
-              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
-                Срочно
-              </span>
-            ) : null}
+        {!selectedVacancy ? (
+          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+            Выберите вакансию выше, чтобы увидеть действия по ней и кандидатов.
           </div>
+        ) : (
+          <>
+            <div className="rounded-3xl border border-violet-200 bg-violet-50/60 p-4 md:p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="max-w-2xl">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-600">
+                    2. Работаем с выбранной вакансией
+                  </div>
 
-          <h2 className="mt-3 text-xl font-semibold text-slate-900">
-            Кандидаты по вакансии: {selectedVacancy.role}
-          </h2>
+                  <h2 className="mt-2 text-2xl font-semibold text-slate-900">
+                    {selectedVacancy.role}
+                  </h2>
 
-          <div className="mt-2 space-y-1 text-sm text-slate-600">
-            <div>Точка: {selectedVacancy.venue_name}</div>
-            <div>
-              Район: {selectedVacancy.city}
-              {selectedVacancy.district ? `, ${selectedVacancy.district}` : ""}
-            </div>
-            <div>Статус вакансии: {vacancyStatusLabel(selectedVacancy.status)}</div>
-            <div>Нужен человек: {formatReadyToStart(selectedVacancy.needed_start)}</div>
-            <div>
-              {selectedVacancy.listing_type === "shift"
-                ? `Дата и время: ${formatShiftTimeLine(selectedVacancy) || "Не указаны"}`
-                : `График: ${selectedVacancy.schedule_text || "Не указан"}`}
-            </div>
-            {selectedVacancy.slots_count ? (
-              <div>Нужно человек: {selectedVacancy.slots_count}</div>
-            ) : null}
-          </div>
-        </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                        selectedVacancy.listing_type
+                      )}`}
+                    >
+                      {getListingTypeLabel(selectedVacancy.listing_type)}
+                    </span>
 
-        <div className="flex flex-col gap-3 md:items-end">
-          <div className="flex flex-wrap gap-2">
-            {selectedVacancy.status !== "closed" &&
-            selectedVacancy.status !== "archived" ? (
-              <button
-                type="button"
-                disabled={busyVacancyId === selectedVacancy.id}
-                onClick={() =>
-                  void runVacancyAction(
-                    selectedVacancy.id,
-                    "close",
-                    "Вакансия закрыта"
-                  )
-                }
-                className="rounded-2xl border border-amber-300 bg-white px-3 py-2 text-sm text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {busyVacancyId === selectedVacancy.id ? "Сохраняем..." : "Закрыть"}
-              </button>
-            ) : null}
+                    <span className="rounded-full bg-white px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200">
+                      {vacancyStatusLabel(selectedVacancy.status)}
+                    </span>
 
-            {selectedVacancy.status !== "archived" ? (
-              <button
-                type="button"
-                disabled={busyVacancyId === selectedVacancy.id}
-                onClick={() =>
-                  void runVacancyAction(
-                    selectedVacancy.id,
-                    "archive",
-                    "Вакансия отправлена в архив"
-                  )
-                }
-                className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {busyVacancyId === selectedVacancy.id ? "Сохраняем..." : "В архив"}
-              </button>
-            ) : null}
+                    {selectedVacancy.urgent_flag ? (
+                      <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                        Срочно
+                      </span>
+                    ) : null}
+                  </div>
 
-            {(selectedVacancy.status === "closed" ||
-              selectedVacancy.status === "archived") ? (
-              <button
-                type="button"
-                disabled={busyVacancyId === selectedVacancy.id}
-                onClick={() =>
-                  void runVacancyAction(
-                    selectedVacancy.id,
-                    "reopen",
-                    "Вакансия возвращена в работу"
-                  )
-                }
-                className="rounded-2xl border border-emerald-300 bg-white px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {busyVacancyId === selectedVacancy.id ? "Сохраняем..." : "Вернуть в работу"}
-              </button>
-            ) : null}
-          </div>
+                  <div className="mt-4 space-y-1 text-sm text-slate-700">
+                    <div>Точка: {selectedVacancy.venue_name}</div>
+                    <div>
+                      Локация: {selectedVacancy.city}
+                      {selectedVacancy.district ? `, ${selectedVacancy.district}` : ""}
+                    </div>
+                    <div>Доход: {selectedVacancy.salary_text || "Не указан"}</div>
+                    <div>
+                      {selectedVacancy.listing_type === "shift"
+                        ? `Дата и время: ${formatShiftTimeLine(selectedVacancy) || "Не указаны"}`
+                        : `График: ${selectedVacancy.schedule_text || "Не указан"}`}
+                    </div>
+                    <div>Нужен человек: {formatReadyToStart(selectedVacancy.needed_start)}</div>
+                    {selectedVacancy.slots_count ? (
+                      <div>Нужно человек: {selectedVacancy.slots_count}</div>
+                    ) : null}
+                  </div>
 
-          <div className="flex flex-wrap gap-2">
-            {(["new", "in_work", "finished", "all"] as CandidateFilter[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setCandidateFilter(item)}
-                className={`rounded-2xl border px-3 py-2 text-sm ${
-                  candidateFilter === item
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {candidateFilterLabel(item)}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+                  <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm text-slate-600 ring-1 ring-violet-100">
+                    {getSelectedVacancyActionHint(selectedVacancy.status)}
+                  </div>
+                </div>
 
-      <div className="mt-3 text-sm text-slate-500">
-        {candidateFilterHint(candidateFilter)}
-      </div>
-
-      {selectedVacancyMatches.length === 0 ? (
-        <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-          По выбранному фильтру кандидатов пока нет.
-        </div>
-      ) : (
-        <div className="mt-4 space-y-4">
-          {selectedVacancyMatches.map((match) => {
-            const reliability = reliabilityByCandidateId[match.candidate_id];
-            const actions = getAvailableActions(match.status);
-            const contactsOpened = shouldShowContacts(match.status);
-            const fitReasons = buildCandidateFitReasons(
-              match,
-              selectedVacancy || null,
-              reliability
-            );
-            const score = match.match_score ?? 0;
-            const phoneHref = normalizePhoneHref(match.candidate.phone);
-            const telegramHref = normalizeTelegramHref(match.candidate.telegram_username);
-            const initials = getInitials(match.candidate.full_name);
-            const avatarTone = getCandidateAvatarTone(match.candidate.primary_role);
-
-            return (
-              <div
-                key={match.id}
-                className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
-              >
-                <div className="p-4 md:p-5">
-                  <div className="flex flex-col gap-5">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                      <div className="flex min-w-0 gap-4">
-                        <div
-                          className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${avatarTone} text-base font-semibold shadow-sm ring-1 ring-slate-200`}
-                        >
-                          {initials}
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="text-lg font-semibold text-slate-900">
-                            {match.candidate.full_name}
-                          </div>
-
-                          <div className="mt-1 text-sm text-slate-600">
-                            {match.candidate.primary_role}
-                          </div>
-
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-                              {match.candidate.city}
-                              {match.candidate.district
-                                ? `, ${match.candidate.district}`
-                                : ""}
-                            </span>
-
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-                              Опыт: {formatExperience(match.candidate.horeca_experience_months)}
-                            </span>
-
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-                              Может выйти: {formatReadyToStart(match.candidate.ready_to_start)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100">
-                          {fitLabel(score)} · {score}
-                        </span>
-
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                          {matchStatusLabel(match.status)}
-                        </span>
-
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                          {reliability
-                            ? `Надежность: ${reliabilityLabel(reliability.reliability_score)} (${reliability.reliability_score})`
-                            : "Надежность: без оценки"}
-                        </span>
-                      </div>
+                <div className="w-full md:w-[360px]">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      Действия по вакансии
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-                      <div className="rounded-2xl bg-slate-50 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                          Почему подходит
-                        </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedVacancy.status !== "closed" &&
+                      selectedVacancy.status !== "archived" ? (
+                        <button
+                          type="button"
+                          disabled={busyVacancyId === selectedVacancy.id}
+                          onClick={() =>
+                            void runVacancyAction(
+                              selectedVacancy.id,
+                              "close",
+                              "Вакансия закрыта"
+                            )
+                          }
+                          className="rounded-2xl border border-amber-300 bg-white px-3 py-2 text-sm text-amber-800 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {busyVacancyId === selectedVacancy.id ? "Сохраняем..." : "Закрыть"}
+                        </button>
+                      ) : null}
 
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {fitReasons.map((reason) => (
-                            <span
-                              key={reason}
-                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
-                            >
-                              {reason}
-                            </span>
-                          ))}
-                        </div>
+                      {selectedVacancy.status !== "archived" ? (
+                        <button
+                          type="button"
+                          disabled={busyVacancyId === selectedVacancy.id}
+                          onClick={() =>
+                            void runVacancyAction(
+                              selectedVacancy.id,
+                              "archive",
+                              "Вакансия отправлена в архив"
+                            )
+                          }
+                          className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {busyVacancyId === selectedVacancy.id ? "Сохраняем..." : "В архив"}
+                        </button>
+                      ) : null}
 
-                        <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
-                          {getMatchStatusHint(match.status)}
-                        </div>
+                      {(selectedVacancy.status === "closed" ||
+                        selectedVacancy.status === "archived") ? (
+                        <button
+                          type="button"
+                          disabled={busyVacancyId === selectedVacancy.id}
+                          onClick={() =>
+                            void runVacancyAction(
+                              selectedVacancy.id,
+                              "reopen",
+                              "Вакансия возвращена в работу"
+                            )
+                          }
+                          className="rounded-2xl border border-emerald-300 bg-white px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {busyVacancyId === selectedVacancy.id
+                            ? "Сохраняем..."
+                            : "Вернуть в работу"}
+                        </button>
+                      ) : null}
+                    </div>
 
-                        {match.comment ? (
-                          <div className="mt-4 text-sm text-slate-500">
-                            Комментарий: {match.comment}
-                          </div>
-                        ) : null}
+                    <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-2xl bg-slate-50 px-3 py-3">
+                        Всего: {selectedVacancy.totalCount}
                       </div>
-
-                      <div className="space-y-4">
-                        {contactsOpened ? (
-                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                            <div className="text-sm font-semibold text-emerald-900">
-                              Следующий шаг — связаться с кандидатом
-                            </div>
-
-                            <div className="mt-3 space-y-1">
-                              <div>Телефон: {match.candidate.phone}</div>
-                              {match.candidate.telegram_username ? (
-                                <div>Telegram: @{match.candidate.telegram_username}</div>
-                              ) : (
-                                <div className="text-emerald-700">
-                                  Telegram не указан
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="mt-4 flex flex-col gap-2">
-                              {phoneHref ? (
-                                <a
-                                  href={phoneHref}
-                                  className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-                                >
-                                  Позвонить
-                                </a>
-                              ) : null}
-
-                              {telegramHref ? (
-                                <a
-                                  href={telegramHref}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
-                                >
-                                  Написать в Telegram
-                                </a>
-                              ) : null}
-
-                              {!phoneHref && !telegramHref ? (
-                                <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
-                                  У кандидата нет контактов для быстрого выхода на связь.
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                            Контакты откроются после приглашения кандидата.
-                          </div>
-                        )}
-
-                        {actions.length === 0 ? (
-                          <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                            Для текущего статуса больше нет доступных действий.
-                          </div>
-                        ) : (
-                          <div className="grid gap-2">
-                            {actions.map((action) => (
-                              <button
-                                key={action.key}
-                                type="button"
-                                disabled={busyMatchId === match.id}
-                                onClick={() =>
-                                  void runMatchAction(
-                                    match.id,
-                                    action.endpoint,
-                                    action.successText
-                                  )
-                                }
-                                className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {busyMatchId === match.id ? "Сохраняем..." : action.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                      <div className="rounded-2xl bg-amber-50 px-3 py-3">
+                        Новые: {selectedVacancy.newCount}
+                      </div>
+                      <div className="rounded-2xl bg-sky-50 px-3 py-3">
+                        В работе: {selectedVacancy.inWorkCount}
+                      </div>
+                      <div className="rounded-2xl bg-emerald-50 px-3 py-3">
+                        Завершены: {selectedVacancy.finishedCount}
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-    </>
-  )}
-</section>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-xl font-semibold text-slate-900">
+                  3. Кандидаты по выбранной вакансии
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Ниже только кандидаты именно по вакансии «{selectedVacancy.role}».
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {(["new", "in_work", "finished", "all"] as CandidateFilter[]).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setCandidateFilter(item)}
+                    className={`rounded-2xl border px-3 py-2 text-sm ${
+                      candidateFilter === item
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {candidateFilterLabel(item)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3 text-sm text-slate-500">
+              {candidateFilterHint(candidateFilter)}
+            </div>
+
+            {selectedVacancyMatches.length === 0 ? (
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                По выбранному фильтру кандидатов пока нет.
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {selectedVacancyMatches.map((match) => {
+                  const reliability = reliabilityByCandidateId[match.candidate_id];
+                  const actions = getAvailableActions(match.status);
+                  const contactsOpened = shouldShowContacts(match.status);
+                  const fitReasons = buildCandidateFitReasons(
+                    match,
+                    selectedVacancy || null,
+                    reliability
+                  );
+                  const score = match.match_score ?? 0;
+                  const phoneHref = normalizePhoneHref(match.candidate.phone);
+                  const telegramHref = normalizeTelegramHref(match.candidate.telegram_username);
+                  const initials = getInitials(match.candidate.full_name);
+                  const avatarTone = getCandidateAvatarTone(match.candidate.primary_role);
+
+                  return (
+                    <div
+                      key={match.id}
+                      className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm"
+                    >
+                      <div className="p-4 md:p-5">
+                        <div className="flex flex-col gap-5">
+                          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                            <div className="flex min-w-0 gap-4">
+                              <div
+                                className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${avatarTone} text-base font-semibold shadow-sm ring-1 ring-slate-200`}
+                              >
+                                {initials}
+                              </div>
+
+                              <div className="min-w-0">
+                                <div className="text-lg font-semibold text-slate-900">
+                                  {match.candidate.full_name}
+                                </div>
+
+                                <div className="mt-1 text-sm text-slate-600">
+                                  {match.candidate.primary_role}
+                                </div>
+
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                                    {match.candidate.city}
+                                    {match.candidate.district
+                                      ? `, ${match.candidate.district}`
+                                      : ""}
+                                  </span>
+
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                                    Опыт: {formatExperience(match.candidate.horeca_experience_months)}
+                                  </span>
+
+                                  <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
+                                    Может выйти: {formatReadyToStart(match.candidate.ready_to_start)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-100">
+                                {fitLabel(score)} · {score}
+                              </span>
+
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                                {matchStatusLabel(match.status)}
+                              </span>
+
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                                {reliability
+                                  ? `Надежность: ${reliabilityLabel(
+                                      reliability.reliability_score
+                                    )} (${reliability.reliability_score})`
+                                  : "Надежность: без оценки"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+                            <div className="rounded-2xl bg-slate-50 p-4">
+                              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                Почему подходит
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {fitReasons.map((reason) => (
+                                  <span
+                                    key={reason}
+                                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
+                                  >
+                                    {reason}
+                                  </span>
+                                ))}
+                              </div>
+
+                              <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
+                                {getMatchStatusHint(match.status)}
+                              </div>
+
+                              {match.comment ? (
+                                <div className="mt-4 text-sm text-slate-500">
+                                  Комментарий: {match.comment}
+                                </div>
+                              ) : null}
+                            </div>
+
+                            <div className="space-y-4">
+                              {contactsOpened ? (
+                                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                                  <div className="text-sm font-semibold text-emerald-900">
+                                    Следующий шаг — связаться с кандидатом
+                                  </div>
+
+                                  <div className="mt-3 space-y-1">
+                                    <div>Телефон: {match.candidate.phone}</div>
+                                    {match.candidate.telegram_username ? (
+                                      <div>Telegram: @{match.candidate.telegram_username}</div>
+                                    ) : (
+                                      <div className="text-emerald-700">
+                                        Telegram не указан
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-4 flex flex-col gap-2">
+                                    {phoneHref ? (
+                                      <a
+                                        href={phoneHref}
+                                        className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                                      >
+                                        Позвонить
+                                      </a>
+                                    ) : null}
+
+                                    {telegramHref ? (
+                                      <a
+                                        href={telegramHref}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                      >
+                                        Написать в Telegram
+                                      </a>
+                                    ) : null}
+
+                                    {!phoneHref && !telegramHref ? (
+                                      <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
+                                        У кандидата нет контактов для быстрого выхода на связь.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                                  Контакты откроются после приглашения кандидата.
+                                </div>
+                              )}
+
+                              {actions.length === 0 ? (
+                                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                                  Для текущего статуса больше нет доступных действий.
+                                </div>
+                              ) : (
+                                <div className="grid gap-2">
+                                  {actions.map((action) => (
+                                    <button
+                                      key={action.key}
+                                      type="button"
+                                      disabled={busyMatchId === match.id}
+                                      onClick={() =>
+                                        void runMatchAction(
+                                          match.id,
+                                          action.endpoint,
+                                          action.successText
+                                        )
+                                      }
+                                      className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {busyMatchId === match.id ? "Сохраняем..." : action.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </main>
   );
 }
