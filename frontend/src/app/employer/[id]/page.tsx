@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { getCurrentEmployerId } from "@/lib/current-user";
 
@@ -663,7 +663,7 @@ export default function EmployerDashboardPage() {
     useState<VacancyTypeFilter>("all");
   const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
   const [busyVacancyId, setBusyVacancyId] = useState<number | null>(null);
-
+  const selectedVacancySectionRef = useRef<HTMLElement | null>(null);
   const [reliabilityByCandidateId, setReliabilityByCandidateId] = useState<
     Record<number, CandidateReliability>
   >({});
@@ -826,7 +826,20 @@ export default function EmployerDashboardPage() {
       setSelectedVacancyId(vacanciesWithStats[0].id);
     }
   }, [vacanciesWithStats, selectedVacancyId]);
-
+  useEffect(() => {
+    if (!selectedVacancyId) {
+      return;
+    }
+  
+    const timer = window.setTimeout(() => {
+      selectedVacancySectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
+  
+    return () => window.clearTimeout(timer);
+  }, [selectedVacancyId]);
   const selectedVacancyMatches = useMemo(() => {
     const filtered = matches
       .filter((item) => item.vacancy_id === selectedVacancyId)
@@ -1266,8 +1279,11 @@ export default function EmployerDashboardPage() {
         )}
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        {!selectedVacancy ? (
+      <section
+  ref={selectedVacancySectionRef}
+  className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"
+>
+  {!selectedVacancy ? (
           <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
             Выберите вакансию выше, чтобы увидеть действия по ней и кандидатов.
           </div>
