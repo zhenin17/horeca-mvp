@@ -71,6 +71,7 @@ type CandidateReliability = {
 };
 
 type CandidateFilter = "new" | "in_work" | "finished" | "all";
+type VacancyTypeFilter = "all" | "job" | "part_time" | "shift";
 
 type MatchAction = {
   key: string;
@@ -376,6 +377,44 @@ function candidateFilterHint(filter: CandidateFilter) {
       return "";
   }
 }
+function vacancyTypeFilterLabel(filter: VacancyTypeFilter) {
+  switch (filter) {
+    case "job":
+      return "Работа";
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смены";
+    case "all":
+    default:
+      return "Все типы";
+  }
+}
+
+function vacancyTypeFilterHint(filter: VacancyTypeFilter) {
+  switch (filter) {
+    case "job":
+      return "Показываем только постоянную работу.";
+    case "part_time":
+      return "Показываем только подработку.";
+    case "shift":
+      return "Показываем только смены.";
+    case "all":
+    default:
+      return "Показываем вакансии всех типов.";
+  }
+}
+
+function belongsToVacancyTypeFilter(
+  vacancy: VacancyItem,
+  filter: VacancyTypeFilter
+) {
+  if (filter === "all") {
+    return true;
+  }
+
+  return (vacancy.listing_type || "job") === filter;
+}
 
 function fitLabel(score: number) {
   if (score >= 80) {
@@ -607,8 +646,10 @@ export default function EmployerDashboardPage() {
   const [vacancies, setVacancies] = useState<VacancyItem[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
   const [selectedVacancyId, setSelectedVacancyId] = useState<number | null>(null);
-  const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>("new");
-  const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
+const [candidateFilter, setCandidateFilter] = useState<CandidateFilter>("new");
+const [vacancyTypeFilter, setVacancyTypeFilter] =
+  useState<VacancyTypeFilter>("all");
+const [busyMatchId, setBusyMatchId] = useState<number | null>(null);
 
   const [reliabilityByCandidateId, setReliabilityByCandidateId] = useState<
     Record<number, CandidateReliability>
@@ -729,7 +770,9 @@ export default function EmployerDashboardPage() {
   }, [employerId]);
 
   const vacanciesWithStats = useMemo(() => {
-    return vacancies.map((vacancy) => {
+    return vacancies
+      .filter((vacancy) => belongsToVacancyTypeFilter(vacancy, vacancyTypeFilter))
+      .map((vacancy) => {
       const vacancyMatches = matches.filter((item) => item.vacancy_id === vacancy.id);
 
       const totalCount = vacancyMatches.length;
@@ -751,12 +794,24 @@ export default function EmployerDashboardPage() {
         finishedCount,
       };
     });
-  }, [vacancies, matches]);
+  }, [vacancies, matches, vacancyTypeFilter]);
 
   const selectedVacancy = useMemo(() => {
     return vacanciesWithStats.find((item) => item.id === selectedVacancyId) || null;
   }, [vacanciesWithStats, selectedVacancyId]);
-
+  useEffect(() => {
+    if (vacanciesWithStats.length === 0) {
+      setSelectedVacancyId(null);
+      return;
+    }
+  
+    if (
+      !selectedVacancyId ||
+      !vacanciesWithStats.some((item) => item.id === selectedVacancyId)
+    ) {
+      setSelectedVacancyId(vacanciesWithStats[0].id);
+    }
+  }, [vacanciesWithStats, selectedVacancyId]);
   const selectedVacancyMatches = useMemo(() => {
     const filtered = matches
       .filter((item) => item.vacancy_id === selectedVacancyId)
@@ -998,15 +1053,40 @@ export default function EmployerDashboardPage() {
       ) : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold text-slate-900">Мои вакансии</h2>
-          <Link
-            href={`/employer/${employer.id}/create-vacancies`}
-            className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Добавить вакансию
-          </Link>
-        </div>
+      <div className="flex flex-col gap-4">
+  <div className="flex items-center justify-between gap-4">
+    <h2 className="text-xl font-semibold text-slate-900">Мои вакансии</h2>
+    <Link
+      href={`/employer/${employer.id}/create-vacancies`}
+      className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+    >
+      Добавить вакансию
+    </Link>
+  </div>
+
+  <div>
+    <div className="flex flex-wrap gap-2">
+      {(["all", "job", "part_time", "shift"] as VacancyTypeFilter[]).map((item) => (
+        <button
+          key={item}
+          type="button"
+          onClick={() => setVacancyTypeFilter(item)}
+          className={`rounded-2xl border px-3 py-2 text-sm ${
+            vacancyTypeFilter === item
+              ? "border-violet-600 bg-violet-600 text-white"
+              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          {vacancyTypeFilterLabel(item)}
+        </button>
+      ))}
+    </div>
+
+    <div className="mt-3 text-sm text-slate-500">
+      {vacancyTypeFilterHint(vacancyTypeFilter)}
+    </div>
+  </div>
+</div>
 
         {vacanciesWithStats.length === 0 ? (
           <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
