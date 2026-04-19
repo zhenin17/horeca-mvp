@@ -11,7 +11,10 @@ import {
   getDistrictOptions,
 } from "@/lib/location-options";
 
+type ListingType = "job" | "part_time" | "shift";
+
 type VacancyForm = {
+  listing_type: ListingType;
   role: string;
   venue_name: string;
   city: string;
@@ -19,6 +22,11 @@ type VacancyForm = {
   salary_text: string;
   schedule_text: string;
   needed_start: string;
+  shift_date: string;
+  shift_start_time: string;
+  shift_end_time: string;
+  urgent_flag: boolean;
+  slots_count: string;
   status: string;
 };
 
@@ -39,6 +47,16 @@ function validateForm(form: VacancyForm): FieldErrors {
     errors.city = "Укажи город";
   }
 
+  if (form.listing_type === "shift") {
+    if (!form.shift_date.trim()) {
+      errors.shift_date = "Укажи дату смены";
+    }
+
+    if (!form.shift_start_time.trim()) {
+      errors.shift_start_time = "Укажи время начала";
+    }
+  }
+
   return errors;
 }
 
@@ -50,6 +68,32 @@ function inputClass(hasError?: boolean) {
   }`;
 }
 
+function listingTypeLabel(type: ListingType) {
+  switch (type) {
+    case "job":
+      return "Работа";
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смена";
+    default:
+      return "Работа";
+  }
+}
+
+function listingTypeHint(type: ListingType) {
+  switch (type) {
+    case "job":
+      return "Подходит для постоянной работы или стандартной вакансии.";
+    case "part_time":
+      return "Подходит для гибкого графика, частичной занятости или подработки.";
+    case "shift":
+      return "Подходит для разового или срочного выхода на конкретную дату и время.";
+    default:
+      return "";
+  }
+}
+
 export default function EmployerCreateVacancyPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -57,6 +101,7 @@ export default function EmployerCreateVacancyPage() {
   const employerId = Number(params?.id);
 
   const [form, setForm] = useState<VacancyForm>({
+    listing_type: "job",
     role: "",
     venue_name: "",
     city: "Санкт-Петербург",
@@ -64,6 +109,11 @@ export default function EmployerCreateVacancyPage() {
     salary_text: "",
     schedule_text: "",
     needed_start: "tomorrow",
+    shift_date: "",
+    shift_start_time: "",
+    shift_end_time: "",
+    urgent_flag: false,
+    slots_count: "1",
     status: "new",
   });
 
@@ -74,6 +124,7 @@ export default function EmployerCreateVacancyPage() {
 
   const isEmployerIdValid = useMemo(() => Number.isFinite(employerId), [employerId]);
   const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
+  const isShift = form.listing_type === "shift";
 
   useEffect(() => {
     if (typeof window !== "undefined" && Number.isFinite(employerId)) {
@@ -90,6 +141,16 @@ export default function EmployerCreateVacancyPage() {
 
       if (key === "city") {
         next.district = "";
+      }
+
+      if (key === "listing_type") {
+        if (value !== "shift") {
+          next.shift_date = "";
+          next.shift_start_time = "";
+          next.shift_end_time = "";
+          next.urgent_flag = false;
+          next.slots_count = "1";
+        }
       }
 
       return next;
@@ -130,7 +191,12 @@ export default function EmployerCreateVacancyPage() {
         week: "в течение недели",
         next_week: "со следующей недели",
       };
-      
+
+      const parsedSlots =
+        form.slots_count.trim() && Number(form.slots_count) > 0
+          ? Number(form.slots_count)
+          : null;
+
       const payload = {
         employer_id: employerId,
         role: form.role.trim(),
@@ -142,9 +208,17 @@ export default function EmployerCreateVacancyPage() {
         needed_start: form.needed_start
           ? readyToStartMap[form.needed_start] || form.needed_start.trim()
           : null,
+        listing_type: form.listing_type,
+        shift_date: isShift ? form.shift_date.trim() || null : null,
+        shift_start_time: isShift ? form.shift_start_time.trim() || null : null,
+        shift_end_time: isShift ? form.shift_end_time.trim() || null : null,
+        urgent_flag: isShift ? form.urgent_flag : false,
+        slots_count: isShift ? parsedSlots : null,
         status: form.status,
       };
+
       console.log("vacancy payload", payload);
+
       const response = await fetch("/api/vacancies/", {
         method: "POST",
         headers: {
@@ -241,12 +315,12 @@ export default function EmployerCreateVacancyPage() {
             </div>
 
             <div className="mt-2 text-lg font-semibold text-slate-900">
-              Сначала базовые данные, потом можно дополнять
+              Сначала выберите тип объявления
             </div>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Для старта достаточно роли, точки и города. Остальные поля помогут
-              кандидатам быстрее понять, подходит ли им вакансия.
+              Работа — для стандартной вакансии, подработка — для гибкой занятости,
+              смена — для конкретного выхода на дату и время.
             </p>
           </div>
         </div>
@@ -265,7 +339,39 @@ export default function EmployerCreateVacancyPage() {
       ) : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-3 block text-sm font-medium text-slate-700">
+            Тип объявления
+          </label>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            {(["job", "part_time", "shift"] as ListingType[]).map((type) => {
+              const isActive = form.listing_type === type;
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => updateField("listing_type", type)}
+                  className={`rounded-2xl border px-4 py-4 text-left transition ${
+                    isActive
+                      ? "border-violet-600 bg-violet-50 ring-1 ring-violet-100"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="text-sm font-semibold text-slate-900">
+                    {listingTypeLabel(type)}
+                  </div>
+                  <div className="mt-2 text-sm leading-6 text-slate-600">
+                    {listingTypeHint(type)}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Роль *</label>
             <select
@@ -345,44 +451,128 @@ export default function EmployerCreateVacancyPage() {
             <input
               value={form.salary_text}
               onChange={(e) => updateField("salary_text", e.target.value)}
-              placeholder="Например, 4500 за смену"
+              placeholder={
+                isShift ? "Например, 4500 за смену" : "Например, 90 000 ₽ в месяц"
+              }
               className={inputClass()}
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">График</label>
-            <select
-              value={form.schedule_text}
-              onChange={(e) => updateField("schedule_text", e.target.value)}
-              className={inputClass()}
-            >
-              <option value="">Выберите график</option>
-              {SCHEDULE_OPTIONS.map((schedule) => (
-                <option key={schedule} value={schedule}>
-                  {schedule}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isShift ? (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  График
+                </label>
+                <select
+                  value={form.schedule_text}
+                  onChange={(e) => updateField("schedule_text", e.target.value)}
+                  className={inputClass()}
+                >
+                  <option value="">Выберите график</option>
+                  {SCHEDULE_OPTIONS.map((schedule) => (
+                    <option key={schedule} value={schedule}>
+                      {schedule}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Когда нужен человек
-            </label>
-            <select
-              value={form.needed_start}
-              onChange={(e) => updateField("needed_start", e.target.value)}
-              className={inputClass()}
-            >
-              <option value="">Выберите срок</option>
-              {READY_TO_START_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Когда нужен человек
+                </label>
+                <select
+                  value={form.needed_start}
+                  onChange={(e) => updateField("needed_start", e.target.value)}
+                  className={inputClass()}
+                >
+                  <option value="">Выберите срок</option>
+                  {READY_TO_START_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Дата смены *
+                </label>
+                <input
+                  type="date"
+                  value={form.shift_date}
+                  onChange={(e) => updateField("shift_date", e.target.value)}
+                  className={inputClass(Boolean(fieldErrors.shift_date))}
+                />
+                {fieldErrors.shift_date ? (
+                  <div className="mt-1 text-sm text-red-600">{fieldErrors.shift_date}</div>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Время начала *
+                </label>
+                <input
+                  type="time"
+                  value={form.shift_start_time}
+                  onChange={(e) => updateField("shift_start_time", e.target.value)}
+                  className={inputClass(Boolean(fieldErrors.shift_start_time))}
+                />
+                {fieldErrors.shift_start_time ? (
+                  <div className="mt-1 text-sm text-red-600">
+                    {fieldErrors.shift_start_time}
+                  </div>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Время конца
+                </label>
+                <input
+                  type="time"
+                  value={form.shift_end_time}
+                  onChange={(e) => updateField("shift_end_time", e.target.value)}
+                  className={inputClass()}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Сколько человек нужно
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={form.slots_count}
+                  onChange={(e) => updateField("slots_count", e.target.value)}
+                  className={inputClass()}
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={form.urgent_flag}
+                    onChange={(e) => updateField("urgent_flag", e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">Срочная смена</div>
+                    <div className="text-sm text-slate-600">
+                      Отметьте, если нужен быстрый выход и вакансию стоит показывать как срочную
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </>
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -408,7 +598,13 @@ export default function EmployerCreateVacancyPage() {
             disabled={saving}
             className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? "Сохраняем..." : "Создать вакансию"}
+            {saving
+              ? "Сохраняем..."
+              : isShift
+                ? "Создать смену"
+                : form.listing_type === "part_time"
+                  ? "Создать подработку"
+                  : "Создать вакансию"}
           </button>
 
           <Link
