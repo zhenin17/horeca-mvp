@@ -28,6 +28,12 @@ type VacancyItem = {
   salary_text?: string | null;
   schedule_text?: string | null;
   needed_start?: string | null;
+  listing_type?: "job" | "part_time" | "shift";
+  shift_date?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  urgent_flag?: boolean;
+  slots_count?: number | null;
   status: string;
 };
 
@@ -319,6 +325,68 @@ function normalizeTelegramHref(username?: string | null) {
 
   const cleaned = username.trim().replace(/^@/, "");
   return cleaned ? `https://t.me/${cleaned}` : null;
+}
+
+function getListingTypeLabel(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смена";
+    case "job":
+    default:
+      return "Работа";
+  }
+}
+
+function getListingTypeTone(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
+    case "shift":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-100";
+    case "job":
+    default:
+      return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  }
+}
+
+function formatShiftTimeLine(vacancy?: VacancyItem | null) {
+  if (!vacancy) {
+    return null;
+  }
+
+  if (!vacancy.shift_date && !vacancy.shift_start_time && !vacancy.shift_end_time) {
+    return null;
+  }
+
+  const date = vacancy.shift_date || "Дата не указана";
+
+  if (vacancy.shift_start_time && vacancy.shift_end_time) {
+    return `${date} · ${vacancy.shift_start_time}–${vacancy.shift_end_time}`;
+  }
+
+  if (vacancy.shift_start_time) {
+    return `${date} · с ${vacancy.shift_start_time}`;
+  }
+
+  return date;
+}
+
+function getOpenActionText(vacancy?: VacancyItem | null) {
+  if (!vacancy) {
+    return "Открыть вакансию";
+  }
+
+  if (vacancy.listing_type === "shift") {
+    return "Открыть смену";
+  }
+
+  if (vacancy.listing_type === "part_time") {
+    return "Открыть подработку";
+  }
+
+  return "Открыть вакансию";
 }
 
 export default function CandidateMatchesPage() {
@@ -648,6 +716,20 @@ export default function CandidateMatchesPage() {
                         <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-700">
                           Совпадение: {scoreLabel(score)} · {score}
                         </span>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                            vacancy?.listing_type
+                          )}`}
+                        >
+                          {getListingTypeLabel(vacancy?.listing_type)}
+                        </span>
+
+                        {vacancy?.urgent_flag ? (
+                          <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                            Срочно
+                          </span>
+                        ) : null}
                       </div>
 
                       <h2 className="mt-3 text-xl font-semibold text-slate-900">
@@ -657,6 +739,12 @@ export default function CandidateMatchesPage() {
                       <div className="mt-1 text-sm text-slate-700">
                         {vacancy?.venue_name || "Без названия"}
                       </div>
+
+                      {vacancy?.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
+                        <div className="mt-2 text-sm font-medium text-slate-700">
+                          {formatShiftTimeLine(vacancy)}
+                        </div>
+                      ) : null}
 
                       {employer ? (
                         <div className="mt-1 text-sm text-slate-500">
@@ -672,7 +760,9 @@ export default function CandidateMatchesPage() {
                           Доход: {compactSalary(vacancy?.salary_text)}
                         </span>
                         <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          График: {vacancy?.schedule_text || "Не указан"}
+                          {vacancy?.listing_type === "shift"
+                            ? `Дата и время: ${formatShiftTimeLine(vacancy) || "Не указаны"}`
+                            : `График: ${vacancy?.schedule_text || "Не указан"}`}
                         </span>
                         <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
                           Выход: {formatReadyToStart(vacancy?.needed_start)}
@@ -765,7 +855,7 @@ export default function CandidateMatchesPage() {
                       href={`/candidate/vacancies/${match.vacancy_id}`}
                       className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
                     >
-                      Открыть вакансию
+                      {getOpenActionText(vacancy)}
                     </Link>
 
                     <Link

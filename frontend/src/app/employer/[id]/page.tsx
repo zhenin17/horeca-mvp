@@ -25,6 +25,12 @@ type VacancyItem = {
   salary_text?: string | null;
   schedule_text?: string | null;
   needed_start?: string | null;
+  listing_type?: "job" | "part_time" | "shift";
+  shift_date?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  urgent_flag?: boolean;
+  slots_count?: number | null;
   status: string;
 };
 
@@ -543,6 +549,52 @@ function getVacancyEmoji(role: string) {
   return "📍";
 }
 
+function getListingTypeLabel(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смена";
+    case "job":
+    default:
+      return "Работа";
+  }
+}
+
+function getListingTypeTone(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
+    case "shift":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-100";
+    case "job":
+    default:
+      return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  }
+}
+
+function formatShiftTimeLine(vacancy?: VacancyItem | null) {
+  if (!vacancy) {
+    return null;
+  }
+
+  if (!vacancy.shift_date && !vacancy.shift_start_time && !vacancy.shift_end_time) {
+    return null;
+  }
+
+  const date = vacancy.shift_date || "Дата не указана";
+
+  if (vacancy.shift_start_time && vacancy.shift_end_time) {
+    return `${date} · ${vacancy.shift_start_time}–${vacancy.shift_end_time}`;
+  }
+
+  if (vacancy.shift_start_time) {
+    return `${date} · с ${vacancy.shift_start_time}`;
+  }
+
+  return date;
+}
+
 export default function EmployerDashboardPage() {
   const params = useParams<{ id: string }>();
   const employerId = Number(params?.id);
@@ -988,25 +1040,62 @@ export default function EmployerDashboardPage() {
                           {vacancyEmoji}
                         </div>
 
-                        <div className="mt-4 font-semibold text-slate-900">
-                          {vacancy.role} · {vacancy.venue_name}
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                              vacancy.listing_type
+                            )}`}
+                          >
+                            {getListingTypeLabel(vacancy.listing_type)}
+                          </span>
+
+                          {vacancy.urgent_flag ? (
+                            <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                              Срочно
+                            </span>
+                          ) : null}
+
+                          {needsAttention ? (
+                            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
+                              Требуют внимания: {vacancy.newCount} новых
+                            </span>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 font-semibold text-slate-900">
+                          {vacancy.role}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-700">
+                          {vacancy.venue_name}
                         </div>
                         <div className="mt-1 text-sm text-slate-700">
                           {vacancy.city}
                           {vacancy.district ? `, ${vacancy.district}` : ""}
                         </div>
+
+                        {vacancy.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
+                          <div className="mt-2 text-sm font-medium text-slate-700">
+                            {formatShiftTimeLine(vacancy)}
+                          </div>
+                        ) : null}
+
                         <div className="mt-2 text-sm text-slate-600">
                           Статус: {vacancyStatusLabel(vacancy.status)}
                         </div>
                         <div className="mt-1 text-sm text-slate-600">
-                          График: {vacancy.schedule_text || "—"}
+                          {vacancy.listing_type === "shift"
+                            ? `Дата и время: ${formatShiftTimeLine(vacancy) || "—"}`
+                            : `График: ${vacancy.schedule_text || "—"}`}
                         </div>
                         <div className="mt-1 text-sm text-slate-600">
                           Доход: {vacancy.salary_text || "—"}
                         </div>
-                        {needsAttention ? (
-                          <div className="mt-2 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-900">
-                            Требуют внимания: {vacancy.newCount} новых
+                        <div className="mt-1 text-sm text-slate-600">
+                          Нужен человек: {formatReadyToStart(vacancy.needed_start)}
+                        </div>
+                        {vacancy.slots_count ? (
+                          <div className="mt-1 text-sm text-slate-600">
+                            Нужно человек: {vacancy.slots_count}
                           </div>
                         ) : null}
                       </div>
@@ -1043,7 +1132,23 @@ export default function EmployerDashboardPage() {
           <>
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                      selectedVacancy.listing_type
+                    )}`}
+                  >
+                    {getListingTypeLabel(selectedVacancy.listing_type)}
+                  </span>
+
+                  {selectedVacancy.urgent_flag ? (
+                    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                      Срочно
+                    </span>
+                  ) : null}
+                </div>
+
+                <h2 className="mt-3 text-xl font-semibold text-slate-900">
                   Кандидаты по вакансии: {selectedVacancy.role}
                 </h2>
                 <div className="mt-2 space-y-1 text-sm text-slate-600">
@@ -1054,6 +1159,14 @@ export default function EmployerDashboardPage() {
                   </div>
                   <div>Статус вакансии: {vacancyStatusLabel(selectedVacancy.status)}</div>
                   <div>Нужен человек: {formatReadyToStart(selectedVacancy.needed_start)}</div>
+                  <div>
+                    {selectedVacancy.listing_type === "shift"
+                      ? `Дата и время: ${formatShiftTimeLine(selectedVacancy) || "Не указаны"}`
+                      : `График: ${selectedVacancy.schedule_text || "Не указан"}`}
+                  </div>
+                  {selectedVacancy.slots_count ? (
+                    <div>Нужно человек: {selectedVacancy.slots_count}</div>
+                  ) : null}
                 </div>
               </div>
 
@@ -1191,7 +1304,7 @@ export default function EmployerDashboardPage() {
                             <div className="space-y-4">
                               {contactsOpened ? (
                                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                                  <div className="font-medium text-emerald-900">
+                                  <div className="text-sm font-semibold text-emerald-900">
                                     Следующий шаг — связаться с кандидатом
                                   </div>
 

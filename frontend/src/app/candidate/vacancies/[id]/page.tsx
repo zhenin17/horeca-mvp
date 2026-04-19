@@ -29,6 +29,12 @@ type VacancyItem = {
   salary_text?: string | null;
   schedule_text?: string | null;
   needed_start?: string | null;
+  listing_type?: "job" | "part_time" | "shift";
+  shift_date?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  urgent_flag?: boolean;
+  slots_count?: number | null;
   status: string;
 };
 
@@ -260,8 +266,16 @@ function buildFitReasons(candidate: CandidateItem, vacancy: VacancyItem) {
   return reasons.slice(0, 4);
 }
 
-function buildNextStepText(existingMatch: MatchItem | null) {
+function buildNextStepText(existingMatch: MatchItem | null, vacancy: VacancyItem | null) {
   if (!existingMatch) {
+    if (vacancy?.listing_type === "shift") {
+      return "Если смена вам подходит, можно откликнуться сейчас. Дальше статус сразу появится в разделе откликов.";
+    }
+
+    if (vacancy?.listing_type === "part_time") {
+      return "Если подработка вам подходит, можно откликнуться сейчас. Дальше статус появится в разделе откликов.";
+    }
+
     return "Если вакансия вам подходит, можно откликнуться сейчас. Дальше статус появится в разделе откликов.";
   }
 
@@ -287,7 +301,7 @@ function buildNextStepText(existingMatch: MatchItem | null) {
   }
 }
 
-function buildAfterApplySteps(existingMatch: MatchItem | null) {
+function buildAfterApplySteps(existingMatch: MatchItem | null, vacancy: VacancyItem | null) {
   if (existingMatch) {
     return [
       "Новый отклик создавать не нужно.",
@@ -296,11 +310,81 @@ function buildAfterApplySteps(existingMatch: MatchItem | null) {
     ];
   }
 
+  if (vacancy?.listing_type === "shift") {
+    return [
+      "Ваш отклик на смену отправится работодателю.",
+      "Статус сразу появится в разделе «Мои отклики».",
+      "Если смена срочная или по вам быстро примут решение, это будет видно по статусу.",
+    ];
+  }
+
   return [
     "Ваш отклик отправится работодателю.",
     "Статус сразу появится в разделе «Мои отклики».",
     "Если работодатель посмотрит вас или захочет связаться, это будет видно по статусу.",
   ];
+}
+
+function getListingTypeLabel(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смена";
+    case "job":
+    default:
+      return "Работа";
+  }
+}
+
+function getListingTypeTone(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
+    case "shift":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-100";
+    case "job":
+    default:
+      return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  }
+}
+
+function formatShiftTimeLine(vacancy: VacancyItem) {
+  if (!vacancy.shift_date && !vacancy.shift_start_time && !vacancy.shift_end_time) {
+    return null;
+  }
+
+  const date = vacancy.shift_date || "Дата не указана";
+
+  if (vacancy.shift_start_time && vacancy.shift_end_time) {
+    return `${date} · ${vacancy.shift_start_time}–${vacancy.shift_end_time}`;
+  }
+
+  if (vacancy.shift_start_time) {
+    return `${date} · с ${vacancy.shift_start_time}`;
+  }
+
+  return date;
+}
+
+function getApplyButtonText(vacancy: VacancyItem, existingMatch: MatchItem | null, applying: boolean) {
+  if (existingMatch) {
+    return "Отклик уже есть";
+  }
+
+  if (applying) {
+    return "Отправляем...";
+  }
+
+  if (vacancy.listing_type === "shift") {
+    return "Откликнуться на смену";
+  }
+
+  if (vacancy.listing_type === "part_time") {
+    return "Откликнуться на подработку";
+  }
+
+  return "Откликнуться на вакансию";
 }
 
 export default function CandidateVacancyDetailsPage() {
@@ -402,8 +486,8 @@ export default function CandidateVacancyDetailsPage() {
   }, [candidate, vacancy]);
 
   const afterApplySteps = useMemo(() => {
-    return buildAfterApplySteps(existingMatch);
-  }, [existingMatch]);
+    return buildAfterApplySteps(existingMatch, vacancy);
+  }, [existingMatch, vacancy]);
 
   async function applyToVacancy() {
     try {
@@ -530,16 +614,42 @@ export default function CandidateVacancyDetailsPage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-medium uppercase tracking-[0.18em] text-violet-600">
-                  Вакансия
+                  {vacancy.listing_type === "shift"
+                    ? "Смена"
+                    : vacancy.listing_type === "part_time"
+                      ? "Подработка"
+                      : "Вакансия"}
                 </p>
 
-                <h1 className="mt-2 text-2xl font-semibold text-slate-900">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                      vacancy.listing_type
+                    )}`}
+                  >
+                    {getListingTypeLabel(vacancy.listing_type)}
+                  </span>
+
+                  {vacancy.urgent_flag ? (
+                    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                      Срочно
+                    </span>
+                  ) : null}
+                </div>
+
+                <h1 className="mt-3 text-2xl font-semibold text-slate-900">
                   {vacancy.role}
                 </h1>
 
                 <div className="mt-1 text-sm text-slate-700">
                   {vacancy.venue_name}
                 </div>
+
+                {vacancy.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
+                  <div className="mt-2 text-sm font-medium text-slate-700">
+                    {formatShiftTimeLine(vacancy)}
+                  </div>
+                ) : null}
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
@@ -552,7 +662,9 @@ export default function CandidateVacancyDetailsPage() {
                   </span>
 
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                    График: {vacancy.schedule_text || "Не указан"}
+                    {vacancy.listing_type === "shift"
+                      ? `Дата и время: ${formatShiftTimeLine(vacancy) || "Не указаны"}`
+                      : `График: ${vacancy.schedule_text || "Не указан"}`}
                   </span>
 
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
@@ -576,11 +688,7 @@ export default function CandidateVacancyDetailsPage() {
                   disabled={applying || Boolean(existingMatch)}
                   className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {existingMatch
-                    ? "Отклик уже есть"
-                    : applying
-                      ? "Отправляем..."
-                      : "Откликнуться"}
+                  {getApplyButtonText(vacancy, existingMatch, applying)}
                 </button>
 
                 <Link
@@ -598,7 +706,7 @@ export default function CandidateVacancyDetailsPage() {
               </div>
 
               <div className="mt-2 text-sm leading-6 text-slate-700">
-                {buildNextStepText(existingMatch)}
+                {buildNextStepText(existingMatch, vacancy)}
               </div>
             </div>
           </div>
@@ -700,6 +808,10 @@ export default function CandidateVacancyDetailsPage() {
 
           <div className="mt-4 space-y-3 text-sm text-slate-600">
             <div>
+              <span className="font-medium text-slate-900">Тип:</span>{" "}
+              {getListingTypeLabel(vacancy.listing_type)}
+            </div>
+            <div>
               <span className="font-medium text-slate-900">Роль:</span> {vacancy.role}
             </div>
             <div>
@@ -715,7 +827,12 @@ export default function CandidateVacancyDetailsPage() {
               <span className="font-medium text-slate-900">Доход:</span> {formatIncomeText(vacancy.salary_text)}
             </div>
             <div>
-              <span className="font-medium text-slate-900">График:</span> {vacancy.schedule_text || "Не указан"}
+              <span className="font-medium text-slate-900">
+                {vacancy.listing_type === "shift" ? "Дата и время:" : "График:"}
+              </span>{" "}
+              {vacancy.listing_type === "shift"
+                ? formatShiftTimeLine(vacancy) || "Не указаны"
+                : vacancy.schedule_text || "Не указан"}
             </div>
             <div>
               <span className="font-medium text-slate-900">Когда нужен человек:</span>{" "}
@@ -725,6 +842,17 @@ export default function CandidateVacancyDetailsPage() {
               <span className="font-medium text-slate-900">Статус вакансии:</span>{" "}
               {formatVacancyStatus(vacancy.status)}
             </div>
+            {vacancy.urgent_flag ? (
+              <div>
+                <span className="font-medium text-slate-900">Срочность:</span> Срочная
+              </div>
+            ) : null}
+            {vacancy.slots_count ? (
+              <div>
+                <span className="font-medium text-slate-900">Нужно человек:</span>{" "}
+                {vacancy.slots_count}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -785,11 +913,7 @@ export default function CandidateVacancyDetailsPage() {
             disabled={applying || Boolean(existingMatch)}
             className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {existingMatch
-              ? "Отклик уже отправлен"
-              : applying
-                ? "Отправляем..."
-                : "Откликнуться на вакансию"}
+            {getApplyButtonText(vacancy, existingMatch, applying)}
           </button>
 
           <Link

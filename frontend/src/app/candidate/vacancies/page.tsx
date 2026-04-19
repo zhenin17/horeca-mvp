@@ -28,6 +28,12 @@ type VacancyItem = {
   salary_text?: string | null;
   schedule_text?: string | null;
   needed_start?: string | null;
+  listing_type?: "job" | "part_time" | "shift";
+  shift_date?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  urgent_flag?: boolean;
+  slots_count?: number | null;
   status: string;
 };
 
@@ -307,14 +313,6 @@ function getVacancyStatusTone(match?: MatchItem | null) {
   return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
 }
 
-function getPrimaryActionText(match?: MatchItem | null) {
-  if (!match) {
-    return "Открыть вакансию";
-  }
-
-  return "Посмотреть вакансию";
-}
-
 function getRoleEmoji(role: string) {
   const value = role.trim().toLowerCase();
 
@@ -368,6 +366,64 @@ function getLocationLine(vacancy: VacancyItem) {
   }
 
   return vacancy.city || vacancy.district || "Локация не указана";
+}
+
+function getListingTypeLabel(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смена";
+    case "job":
+    default:
+      return "Работа";
+  }
+}
+
+function getListingTypeTone(type?: VacancyItem["listing_type"]) {
+  switch (type) {
+    case "part_time":
+      return "bg-violet-50 text-violet-700 ring-1 ring-violet-100";
+    case "shift":
+      return "bg-amber-50 text-amber-700 ring-1 ring-amber-100";
+    case "job":
+    default:
+      return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
+  }
+}
+
+function formatShiftTimeLine(vacancy: VacancyItem) {
+  if (!vacancy.shift_date && !vacancy.shift_start_time && !vacancy.shift_end_time) {
+    return null;
+  }
+
+  const date = vacancy.shift_date || "Дата не указана";
+
+  if (vacancy.shift_start_time && vacancy.shift_end_time) {
+    return `${date} · ${vacancy.shift_start_time}–${vacancy.shift_end_time}`;
+  }
+
+  if (vacancy.shift_start_time) {
+    return `${date} · с ${vacancy.shift_start_time}`;
+  }
+
+  return date;
+}
+
+function getPrimaryActionText(vacancy: VacancyCardItem) {
+  if (vacancy.match) {
+    return "Посмотреть вакансию";
+  }
+
+  if (vacancy.listing_type === "shift") {
+    return "Посмотреть смену";
+  }
+
+  if (vacancy.listing_type === "part_time") {
+    return "Посмотреть подработку";
+  }
+
+  return "Открыть вакансию";
 }
 
 export default function CandidateVacanciesPage() {
@@ -692,13 +748,36 @@ export default function CandidateVacanciesPage() {
                           {roleEmoji}
                         </div>
 
-                        <div className="mt-4 space-y-1">
+                        <div className="mt-4 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                                vacancy.listing_type
+                              )}`}
+                            >
+                              {getListingTypeLabel(vacancy.listing_type)}
+                            </span>
+
+                            {vacancy.urgent_flag ? (
+                              <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                                Срочно
+                              </span>
+                            ) : null}
+                          </div>
+
                           <div className="text-xl font-semibold text-slate-900">
                             {vacancy.role}
                           </div>
+
                           <div className="text-sm text-slate-700">
                             {vacancy.venue_name}
                           </div>
+
+                          {vacancy.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
+                            <div className="text-sm font-medium text-slate-700">
+                              {formatShiftTimeLine(vacancy)}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
 
@@ -733,10 +812,12 @@ export default function CandidateVacanciesPage() {
 
                       <div className="rounded-2xl bg-slate-50 p-3">
                         <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
-                          График
+                          {vacancy.listing_type === "shift" ? "Дата и время" : "График"}
                         </div>
                         <div className="mt-2 text-sm font-medium text-slate-900">
-                          {vacancy.schedule_text || "Не указан"}
+                          {vacancy.listing_type === "shift"
+                            ? formatShiftTimeLine(vacancy) || "Не указаны"
+                            : vacancy.schedule_text || "Не указан"}
                         </div>
                       </div>
 
@@ -780,7 +861,7 @@ export default function CandidateVacanciesPage() {
                         href={`/candidate/vacancies/${vacancy.id}`}
                         className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white hover:opacity-95"
                       >
-                        {getPrimaryActionText(vacancy.match)}
+                        {getPrimaryActionText(vacancy)}
                       </Link>
 
                       {vacancy.match ? (
