@@ -16,8 +16,8 @@ from app.core.db import check_db_connection
 
 app = FastAPI(
     title=settings.app_name,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    docs_url="/api/docs/",
+    openapi_url="/api/openapi.json/",
 )
 
 app.add_middleware(
