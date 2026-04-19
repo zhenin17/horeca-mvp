@@ -71,7 +71,7 @@ export async function uploadVacancyPhoto<T = unknown>(
   const formData = new FormData();
   formData.append("file", file);
 
-  return apiPostFormData<T>(`/vacancies/${vacancyId}/photo`, formData);
+  return apiPostFormData<T>(`/vacancies/${vacancyId}/photos/upload`, formData);
 }
 
 export async function uploadCandidatePhoto<T = unknown>(
@@ -81,5 +81,5 @@ export async function uploadCandidatePhoto<T = unknown>(
   const formData = new FormData();
   formData.append("file", file);
 
-  return apiPostFormData<T>(`/candidates/${candidateId}/photo`, formData);
+  return apiPostFormData<T>(`/candidates/${candidateId}/photos/upload`, formData);
 }
