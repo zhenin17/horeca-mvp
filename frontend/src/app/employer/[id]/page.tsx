@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { normalizeMediaUrl } from "@/lib/api";
 import { getCurrentEmployerId } from "@/lib/current-user";
 
 type EmployerItem = {
@@ -677,6 +678,10 @@ function VacancyPhotoThumb({
   const coverPhoto = getVacancyCoverPhoto(vacancy);
   const [imageFailed, setImageFailed] = useState(false);
 
+  useEffect(() => {
+    setImageFailed(false);
+  }, [coverPhoto?.photo_url]);
+
   if (!coverPhoto || imageFailed) {
     return (
       <div className="flex h-24 w-full items-center justify-center rounded-2xl bg-white/80 ring-1 ring-slate-200 md:h-28">
@@ -691,7 +696,7 @@ function VacancyPhotoThumb({
   return (
     <div className="h-24 w-full overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-slate-200 md:h-28">
       <img
-        src={coverPhoto.photo_url}
+        src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
         alt={`${vacancy.venue_name} — ${vacancy.role}`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}
@@ -708,6 +713,10 @@ function SelectedVacancyPhoto({
   const coverPhoto = getVacancyCoverPhoto(vacancy);
   const [imageFailed, setImageFailed] = useState(false);
   const emoji = getVacancyEmoji(vacancy.role);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [coverPhoto?.photo_url]);
 
   if (!coverPhoto || imageFailed) {
     return (
@@ -726,7 +735,7 @@ function SelectedVacancyPhoto({
   return (
     <div className="h-52 w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
       <img
-        src={coverPhoto.photo_url}
+        src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
         alt={`${vacancy.venue_name} — ${vacancy.role}`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}

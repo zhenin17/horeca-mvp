@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeMediaUrl } from "@/lib/api";
 import { getCurrentCandidateId } from "@/lib/current-user";
 
 type CandidateItem = {
@@ -462,7 +463,7 @@ function VacancyHeroPhoto({
   return (
     <div className="relative h-56 w-full overflow-hidden bg-slate-100 sm:h-64">
       <img
-        src={coverPhoto.photo_url}
+        src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
         alt={`${vacancy.venue_name} — ${vacancy.role}`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}

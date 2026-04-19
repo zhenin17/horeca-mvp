@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeMediaUrl } from "@/lib/api";
 import { getCurrentCandidateId } from "@/lib/current-user";
 
 type CandidateItem = {
@@ -458,6 +459,10 @@ function VacancyMatchPhoto({
   const coverPhoto = getVacancyCoverPhoto(vacancy);
   const [imageFailed, setImageFailed] = useState(false);
 
+  useEffect(() => {
+    setImageFailed(false);
+  }, [coverPhoto?.photo_url]);
+
   if (!coverPhoto || imageFailed) {
     return (
       <div className="flex h-40 w-full items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 via-slate-50 to-white md:h-full">
@@ -477,7 +482,7 @@ function VacancyMatchPhoto({
   return (
     <div className="h-40 w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 md:h-full">
       <img
-        src={coverPhoto.photo_url}
+        src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
         alt={`${vacancy?.venue_name || "Вакансия"} — ${vacancy?.role || ""}`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}
@@ -512,7 +517,7 @@ export default function CandidateMatchesPage() {
           fetch("/api/employers/", { cache: "no-store" }),
         ]);
 
-      if (!candidateResponse.ok) {
+        if (!candidateResponse.ok) {
         throw new Error("Не удалось загрузить данные кандидата");
       }
 

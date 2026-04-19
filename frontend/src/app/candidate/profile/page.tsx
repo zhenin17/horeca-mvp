@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch, uploadCandidatePhoto } from "@/lib/api";
+import {
+  apiFetch,
+  normalizeMediaUrl,
+  uploadCandidatePhoto,
+} from "@/lib/api";
 import { formatReadyToStart } from "@/lib/format";
 import type { CandidateDashboard, CandidateProfileDetail } from "@/lib/types";
 import { getCurrentCandidateId } from "@/lib/current-user";
@@ -158,7 +162,7 @@ function CandidateProfilePhoto({
       }`}
     >
       <img
-        src={photo.photo_url}
+        src={normalizeMediaUrl(photo.photo_url) || ""}
         alt={candidate.full_name}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}
@@ -334,6 +338,10 @@ export default function CandidateProfilePage() {
     () => getNextAction(candidate, dashboard),
     [candidate, dashboard]
   );
+  const currentPhotoUrl = useMemo(
+    () => normalizeMediaUrl(getCandidateProfilePhoto(candidate)?.photo_url),
+    [candidate]
+  );
 
   if (loading) {
     return (
@@ -453,9 +461,9 @@ export default function CandidateProfilePage() {
                 alt="Превью фото профиля"
                 className="h-56 w-full object-cover"
               />
-            ) : getCandidateProfilePhoto(candidate)?.photo_url ? (
+            ) : currentPhotoUrl ? (
               <img
-                src={getCandidateProfilePhoto(candidate)?.photo_url}
+                src={currentPhotoUrl}
                 alt={candidate.full_name}
                 className="h-56 w-full object-cover"
               />

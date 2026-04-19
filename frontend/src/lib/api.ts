@@ -83,3 +83,26 @@ export async function uploadCandidatePhoto<T = unknown>(
 
   return apiPostFormData<T>(`/candidates/${candidateId}/photos/upload`, formData);
 }
+export function normalizeMediaUrl(url?: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    return url;
+  }
+
+  if (url.startsWith("/api/")) {
+    return url;
+  }
+
+  if (url.startsWith("/uploads/")) {
+    return `/api${url}`;
+  }
+
+  if (url.startsWith("/")) {
+    return url;
+  }
+
+  return `/api/${url}`;
+}

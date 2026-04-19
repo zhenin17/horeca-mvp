@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { normalizeMediaUrl } from "@/lib/api";
 import { getCurrentCandidateId } from "@/lib/current-user";
 
 type CandidateItem = {
@@ -519,7 +520,7 @@ function VacancyPhotoBlock({
   return (
     <div className="relative h-48 w-full overflow-hidden bg-slate-100">
       <img
-        src={coverPhoto.photo_url}
+        src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
         alt={`${vacancy.venue_name} — ${vacancy.role}`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}
