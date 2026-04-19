@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { uploadVacancyPhoto } from "@/lib/api";
 import {
   CITY_OPTIONS,
   ROLE_OPTIONS,
@@ -185,14 +186,12 @@ export default function EmployerCreateVacancyPage() {
         next.district = "";
       }
 
-      if (key === "listing_type") {
-        if (value !== "shift") {
-          next.urgent_flag = false;
-          next.shift_date = "";
-          next.shift_start_time = "";
-          next.shift_end_time = "";
-          next.slots_count = "1";
-        }
+      if (key === "listing_type" && value !== "shift") {
+        next.urgent_flag = false;
+        next.shift_date = "";
+        next.shift_start_time = "";
+        next.shift_end_time = "";
+        next.slots_count = "1";
       }
 
       return next;
@@ -239,32 +238,6 @@ export default function EmployerCreateVacancyPage() {
 
     setSelectedPhotoFile(file);
     setPhotoPreviewUrl(URL.createObjectURL(file));
-  }
-
-  async function uploadVacancyPhoto(vacancyId: number, file: File) {
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const response = await fetch(`/api/vacancies/${vacancyId}/photo`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      let detail = `Фото не удалось загрузить (${response.status})`;
-
-      if (text.trim()) {
-        try {
-          const data = JSON.parse(text) as { detail?: string; message?: string };
-          detail = data.detail || data.message || text;
-        } catch {
-          detail = text;
-        }
-      }
-
-      throw new Error(detail);
-    }
   }
 
   async function saveVacancy() {
@@ -349,13 +322,6 @@ export default function EmployerCreateVacancyPage() {
           text ||
           `Не удалось создать вакансию (${response.status})`;
 
-        console.error("create vacancy failed", {
-          status: response.status,
-          contentType: response.headers.get("content-type"),
-          text,
-          data,
-        });
-
         throw new Error(backendMessage);
       }
 
@@ -370,6 +336,7 @@ export default function EmployerCreateVacancyPage() {
           setSuccessText("Вакансия и фото успешно сохранены");
         } catch (photoError) {
           console.error(photoError);
+
           if (photoError instanceof Error) {
             setErrorText(
               `Вакансия создана, но фото не загрузилось: ${photoError.message}`
@@ -377,6 +344,7 @@ export default function EmployerCreateVacancyPage() {
           } else {
             setErrorText("Вакансия создана, но фото не загрузилось");
           }
+
           setSuccessText("Вакансия создана");
         }
       } else {
@@ -533,7 +501,10 @@ export default function EmployerCreateVacancyPage() {
 
               {selectedPhotoFile ? (
                 <div className="mt-4 text-sm text-slate-600">
-                  Выбрано: <span className="font-medium text-slate-900">{selectedPhotoFile.name}</span>
+                  Выбрано:{" "}
+                  <span className="font-medium text-slate-900">
+                    {selectedPhotoFile.name}
+                  </span>
                 </div>
               ) : null}
 

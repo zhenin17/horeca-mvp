@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCurrentCandidateId } from "@/lib/current-user";
-import { uploadCandidatePhoto } from "@/lib/api";
+import { normalizeMediaUrl, uploadCandidatePhoto } from "@/lib/api";
 import {
   CITY_OPTIONS,
   ROLE_OPTIONS,
@@ -216,7 +216,7 @@ export default function CandidateOnboardingPage() {
   }
 
   const currentPhotoUrl = useMemo(() => {
-    return getCandidateProfilePhoto(loadedCandidate)?.photo_url || "";
+    return normalizeMediaUrl(getCandidateProfilePhoto(loadedCandidate)?.photo_url);
   }, [loadedCandidate]);
 
   const stepTitle = useMemo(() => {
