@@ -51,6 +51,42 @@ def get_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
     return vacancy
 
 
+@router.post("/{vacancy_id}/close", response_model=VacancyRead)
+def close_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
+    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    vacancy.status = "closed"
+    db.commit()
+    db.refresh(vacancy)
+    return vacancy
+
+
+@router.post("/{vacancy_id}/archive", response_model=VacancyRead)
+def archive_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
+    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    vacancy.status = "archived"
+    db.commit()
+    db.refresh(vacancy)
+    return vacancy
+
+
+@router.post("/{vacancy_id}/reopen", response_model=VacancyRead)
+def reopen_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
+    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    vacancy.status = "in_progress"
+    db.commit()
+    db.refresh(vacancy)
+    return vacancy
+
+
 @router.post("/{vacancy_id}/apply")
 def apply_to_vacancy(
     vacancy_id: int,
@@ -67,6 +103,12 @@ def apply_to_vacancy(
     vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
     if not vacancy:
         raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    if vacancy.status in {"closed", "archived"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Vacancy is not accepting applications",
+        )
 
     existing_match = (
         db.query(VacancyCandidateMatch)

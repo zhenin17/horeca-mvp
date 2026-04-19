@@ -59,6 +59,7 @@ type VacancyCardItem = VacancyItem & {
 };
 
 type VacancyFilter = "all" | "fresh" | "applied";
+type ListingTypeFilter = "all" | "job" | "part_time" | "shift";
 
 async function readJsonSafe<T>(response: Response): Promise<T | null> {
   const text = await response.text();
@@ -239,6 +240,45 @@ function vacancyFilterHint(filter: VacancyFilter) {
     default:
       return "";
   }
+}
+
+function listingTypeFilterLabel(filter: ListingTypeFilter) {
+  switch (filter) {
+    case "job":
+      return "Работа";
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смены";
+    case "all":
+    default:
+      return "Все типы";
+  }
+}
+
+function listingTypeFilterHint(filter: ListingTypeFilter) {
+  switch (filter) {
+    case "job":
+      return "Постоянная работа и обычные вакансии.";
+    case "part_time":
+      return "Короткие форматы подработки без полного графика.";
+    case "shift":
+      return "Отдельные смены с датой и временем.";
+    case "all":
+    default:
+      return "Можно быстро отделить работу, подработку и смены.";
+  }
+}
+
+function listingTypeMatches(
+  vacancy: VacancyItem | VacancyCardItem,
+  filter: ListingTypeFilter
+) {
+  if (filter === "all") {
+    return true;
+  }
+
+  return (vacancy.listing_type || "job") === filter;
 }
 
 function buildFitExplanation(
@@ -433,6 +473,8 @@ export default function CandidateVacanciesPage() {
   const [candidate, setCandidate] = useState<CandidateItem | null>(null);
   const [vacancies, setVacancies] = useState<VacancyCardItem[]>([]);
   const [filter, setFilter] = useState<VacancyFilter>("all");
+  const [listingTypeFilter, setListingTypeFilter] =
+    useState<ListingTypeFilter>("all");
   const [isTelegram, setIsTelegram] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -547,20 +589,21 @@ export default function CandidateVacanciesPage() {
   }, [candidate, stats]);
 
   const filteredVacancies = useMemo(() => {
-    if (filter === "all") {
-      return vacancies;
-    }
+    return vacancies.filter((item) => {
+      const baseMatch =
+        filter === "all"
+          ? true
+          : filter === "fresh"
+            ? !item.match
+            : Boolean(item.match);
 
-    if (filter === "fresh") {
-      return vacancies.filter((item) => !item.match);
-    }
+      if (!baseMatch) {
+        return false;
+      }
 
-    if (filter === "applied") {
-      return vacancies.filter((item) => Boolean(item.match));
-    }
-
-    return vacancies;
-  }, [vacancies, filter]);
+      return listingTypeMatches(item, listingTypeFilter);
+    });
+  }, [vacancies, filter, listingTypeFilter]);
 
   if (loading) {
     return (
@@ -723,12 +766,35 @@ export default function CandidateVacanciesPage() {
             <div className="mt-3 text-sm text-slate-500">
               {vacancyFilterHint(filter)}
             </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {(
+                ["all", "job", "part_time", "shift"] as ListingTypeFilter[]
+              ).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setListingTypeFilter(item)}
+                  className={`rounded-2xl px-4 py-2 text-sm font-medium transition ${
+                    listingTypeFilter === item
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {listingTypeFilterLabel(item)}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 text-sm text-slate-500">
+              {listingTypeFilterHint(listingTypeFilter)}
+            </div>
           </>
         )}
 
         {filteredVacancies.length === 0 ? (
           <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-            По выбранному фильтру вакансий пока нет.
+            По выбранным фильтрам вакансий пока нет.
           </div>
         ) : (
           <div className="mt-4 space-y-4">

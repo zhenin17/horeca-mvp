@@ -63,6 +63,7 @@ type EnrichedMatchItem = MatchItem & {
 };
 
 type MatchFilter = "all" | "unseen" | "viewed" | "in_work" | "finished";
+type ListingTypeFilter = "all" | "job" | "part_time" | "shift";
 
 async function readJsonSafe<T>(response: Response): Promise<T | null> {
   const text = await response.text();
@@ -214,6 +215,34 @@ function filterHint(filter: MatchFilter) {
       return "Завершенные процессы: успех, отказ или остановка.";
     default:
       return "";
+  }
+}
+
+function listingTypeFilterLabel(filter: ListingTypeFilter) {
+  switch (filter) {
+    case "job":
+      return "Работа";
+    case "part_time":
+      return "Подработка";
+    case "shift":
+      return "Смены";
+    case "all":
+    default:
+      return "Все типы";
+  }
+}
+
+function listingTypeFilterHint(filter: ListingTypeFilter) {
+  switch (filter) {
+    case "job":
+      return "Только обычные вакансии постоянной работы.";
+    case "part_time":
+      return "Только подработка и частичная занятость.";
+    case "shift":
+      return "Только смены с конкретной датой и временем.";
+    case "all":
+    default:
+      return "Все отклики по всем типам вакансий.";
   }
 }
 
@@ -389,12 +418,25 @@ function getOpenActionText(vacancy?: VacancyItem | null) {
   return "Открыть вакансию";
 }
 
+function belongsToListingTypeFilter(
+  item: EnrichedMatchItem,
+  filter: ListingTypeFilter
+) {
+  if (filter === "all") {
+    return true;
+  }
+
+  return (item.vacancy?.listing_type || "job") === filter;
+}
+
 export default function CandidateMatchesPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
   const [candidate, setCandidate] = useState<CandidateItem | null>(null);
   const [matches, setMatches] = useState<EnrichedMatchItem[]>([]);
   const [filter, setFilter] = useState<MatchFilter>("all");
+  const [listingTypeFilter, setListingTypeFilter] =
+    useState<ListingTypeFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [isTelegram, setIsTelegram] = useState(false);
 
@@ -512,8 +554,10 @@ export default function CandidateMatchesPage() {
   }, [stats]);
 
   const filteredMatches = useMemo(() => {
-    return matches.filter((item) => belongsToFilter(item.status, filter));
-  }, [matches, filter]);
+    return matches
+      .filter((item) => belongsToFilter(item.status, filter))
+      .filter((item) => belongsToListingTypeFilter(item, listingTypeFilter));
+  }, [matches, filter, listingTypeFilter]);
 
   if (loading) {
     return (
@@ -641,7 +685,11 @@ export default function CandidateMatchesPage() {
 
       {showFilters ? (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap gap-2">
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+            По статусу
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
             {(["all", "unseen", "viewed", "in_work", "finished"] as MatchFilter[]).map(
               (item) => (
                 <button
@@ -661,6 +709,31 @@ export default function CandidateMatchesPage() {
           </div>
 
           <div className="mt-3 text-sm text-slate-500">{filterHint(filter)}</div>
+
+          <div className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+            По типу
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["all", "job", "part_time", "shift"] as ListingTypeFilter[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setListingTypeFilter(item)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  listingTypeFilter === item
+                    ? "bg-violet-600 text-white"
+                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {listingTypeFilterLabel(item)}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 text-sm text-slate-500">
+            {listingTypeFilterHint(listingTypeFilter)}
+          </div>
         </section>
       ) : null}
 
@@ -671,7 +744,7 @@ export default function CandidateMatchesPage() {
               Пока здесь пусто
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              По выбранному фильтру откликов сейчас нет. Можно посмотреть новые
+              По выбранным фильтрам откликов сейчас нет. Можно посмотреть новые
               вакансии и откликнуться на подходящие.
             </p>
             <div className="mt-4">
