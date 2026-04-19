@@ -16,8 +16,21 @@ export default function RootLayout({
     <html lang="ru" suppressHydrationWarning>
       <head>
         <script src="https://telegram.org/js/telegram-web-app.js" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var webApp = window.Telegram && window.Telegram.WebApp;
+                  var theme = (webApp && webApp.colorScheme) || "light";
+                  document.documentElement.setAttribute("data-telegram-theme", theme);
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
       </head>
-      <body className="bg-white text-slate-900">
+      <body className="min-h-screen bg-[var(--tg-bg)] text-[var(--tg-text)]">
         <ClientShell>{children}</ClientShell>
       </body>
     </html>
