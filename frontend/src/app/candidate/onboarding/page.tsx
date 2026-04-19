@@ -3,12 +3,19 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getCurrentCandidateId } from "@/lib/current-user";
+import { uploadCandidatePhoto } from "@/lib/api";
 import {
   CITY_OPTIONS,
   ROLE_OPTIONS,
   READY_TO_START_OPTIONS,
   getDistrictOptions,
 } from "@/lib/location-options";
+
+type CandidatePhoto = {
+  id: number;
+  candidate_id: number;
+  photo_url: string;
+};
 
 type CandidateForm = {
   full_name: string;
@@ -32,6 +39,7 @@ type LoadCandidateResponse = {
   horeca_experience_months: number;
   ready_to_start: string;
   expected_income?: string | null;
+  photos?: CandidatePhoto[];
 };
 
 const initialForm: CandidateForm = {
@@ -74,6 +82,20 @@ function inputClass() {
   return "w-full rounded-2xl border border-slate-300 px-4 py-3 text-base outline-none transition focus:border-slate-900";
 }
 
+function photoButtonClass(disabled?: boolean) {
+  return `inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 ${
+    disabled ? "pointer-events-none opacity-60" : ""
+  }`;
+}
+
+function getCandidateProfilePhoto(candidate: LoadCandidateResponse | null) {
+  if (!candidate?.photos || candidate.photos.length === 0) {
+    return null;
+  }
+
+  return candidate.photos[0] || null;
+}
+
 export default function CandidateOnboardingPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<CandidateForm>(initialForm);
@@ -82,6 +104,12 @@ export default function CandidateOnboardingPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"error" | "success" | "">("");
   const [isTelegram, setIsTelegram] = useState(false);
+  const [loadedCandidate, setLoadedCandidate] =
+    useState<LoadCandidateResponse | null>(null);
+
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
+  const [photoErrorText, setPhotoErrorText] = useState("");
 
   const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
 
@@ -104,6 +132,7 @@ export default function CandidateOnboardingPage() {
         }
 
         const data = (await response.json()) as LoadCandidateResponse;
+        setLoadedCandidate(data);
 
         setForm({
           full_name: data.full_name || "",
@@ -128,6 +157,14 @@ export default function CandidateOnboardingPage() {
     void loadCandidate();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) {
+        URL.revokeObjectURL(photoPreviewUrl);
+      }
+    };
+  }, [photoPreviewUrl]);
+
   function updateField<K extends keyof CandidateForm>(
     key: K,
     value: CandidateForm[K]
@@ -145,6 +182,42 @@ export default function CandidateOnboardingPage() {
       return next;
     });
   }
+
+  function handlePhotoChange(file: File | null) {
+    setPhotoErrorText("");
+
+    if (photoPreviewUrl) {
+      URL.revokeObjectURL(photoPreviewUrl);
+      setPhotoPreviewUrl("");
+    }
+
+    if (!file) {
+      setSelectedPhotoFile(null);
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+    if (!allowedTypes.includes(file.type)) {
+      setSelectedPhotoFile(null);
+      setPhotoErrorText("Поддерживаются JPG, PNG или WEBP");
+      return;
+    }
+
+    const maxSizeMb = 10;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setSelectedPhotoFile(null);
+      setPhotoErrorText("Фото должно быть меньше 10 МБ");
+      return;
+    }
+
+    setSelectedPhotoFile(file);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+  }
+
+  const currentPhotoUrl = useMemo(() => {
+    return getCandidateProfilePhoto(loadedCandidate)?.photo_url || "";
+  }, [loadedCandidate]);
 
   const stepTitle = useMemo(() => {
     const titles: Record<number, string> = {
@@ -242,6 +315,7 @@ export default function CandidateOnboardingPage() {
 
     setSaving(true);
     clearMessage();
+    setPhotoErrorText("");
 
     try {
       const candidateId = getCurrentCandidateId();
@@ -268,6 +342,24 @@ export default function CandidateOnboardingPage() {
 
       if (!response.ok) {
         throw new Error(data.detail || "Не удалось сохранить анкету");
+      }
+
+      if (selectedPhotoFile) {
+        try {
+          await uploadCandidatePhoto(candidateId, selectedPhotoFile);
+        } catch (photoError) {
+          console.error(photoError);
+
+          if (photoError instanceof Error) {
+            setMessage(`Анкета сохранена, но фото не загрузилось: ${photoError.message}`);
+          } else {
+            setMessage("Анкета сохранена, но фото не загрузилось");
+          }
+
+          setMessageType("error");
+          setSaving(false);
+          return;
+        }
       }
 
       setMessage("Анкета сохранена. Переходим к вакансиям.");
@@ -358,6 +450,95 @@ export default function CandidateOnboardingPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         {step === 1 ? (
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+                  {photoPreviewUrl ? (
+                    <img
+                      src={photoPreviewUrl}
+                      alt="Превью фото профиля"
+                      className="h-56 w-full object-cover"
+                    />
+                  ) : currentPhotoUrl ? (
+                    <img
+                      src={currentPhotoUrl}
+                      alt="Текущее фото профиля"
+                      className="h-56 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-56 w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-white px-4 text-center">
+                      <div className="text-3xl">👤</div>
+                      <div className="mt-3 text-sm font-medium text-slate-700">
+                        Фото профиля пока не добавлено
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Добавьте одно фото для работодателей
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col justify-between rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      Фото профиля
+                    </div>
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      Фото не обязательно для сохранения анкеты, но оно делает
+                      профиль живее и понятнее для работодателя.
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <label className={photoButtonClass(saving)}>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
+                          className="hidden"
+                          disabled={saving}
+                          onChange={(e) =>
+                            handlePhotoChange(e.target.files?.[0] || null)
+                          }
+                        />
+                        {selectedPhotoFile || currentPhotoUrl
+                          ? "Изменить фото"
+                          : "Выбрать фото"}
+                      </label>
+
+                      {selectedPhotoFile ? (
+                        <button
+                          type="button"
+                          onClick={() => handlePhotoChange(null)}
+                          disabled={saving}
+                          className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Убрать
+                        </button>
+                      ) : null}
+                    </div>
+
+                    {selectedPhotoFile ? (
+                      <div className="mt-4 text-sm text-slate-600">
+                        Выбрано:{" "}
+                        <span className="font-medium text-slate-900">
+                          {selectedPhotoFile.name}
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {photoErrorText ? (
+                      <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                        {photoErrorText}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 text-xs text-slate-500">
+                    Поддерживаются JPG, PNG, WEBP. До 10 МБ.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="sm:col-span-2">
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Имя и фамилия
@@ -507,6 +688,29 @@ export default function CandidateOnboardingPage() {
 
         {step === 4 ? (
           <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2 rounded-2xl bg-slate-50 p-4">
+              <div className="text-xs text-slate-500">Фото профиля</div>
+              <div className="mt-3">
+                {photoPreviewUrl ? (
+                  <img
+                    src={photoPreviewUrl}
+                    alt="Превью фото профиля"
+                    className="h-40 w-40 rounded-2xl object-cover"
+                  />
+                ) : currentPhotoUrl ? (
+                  <img
+                    src={currentPhotoUrl}
+                    alt="Текущее фото профиля"
+                    className="h-40 w-40 rounded-2xl object-cover"
+                  />
+                ) : (
+                  <div className="flex h-40 w-40 items-center justify-center rounded-2xl bg-white text-3xl ring-1 ring-slate-200">
+                    👤
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="rounded-2xl bg-slate-50 p-4">
               <div className="text-xs text-slate-500">Имя и фамилия</div>
               <div className="mt-1 text-sm font-medium text-slate-900">

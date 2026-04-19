@@ -19,6 +19,14 @@ type CandidateItem = {
   is_active: boolean;
 };
 
+type VacancyPhoto = {
+  id: number;
+  vacancy_id: number;
+  photo_url: string;
+  sort_order: number;
+  is_cover: boolean;
+};
+
 type VacancyItem = {
   id: number;
   employer_id: number;
@@ -36,6 +44,7 @@ type VacancyItem = {
   urgent_flag?: boolean;
   slots_count?: number | null;
   status: string;
+  photos?: VacancyPhoto[];
 };
 
 type MatchItem = {
@@ -193,14 +202,17 @@ function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
     score += 15;
   }
 
-  if (candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()) {
+  if (
+    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+  ) {
     score += 10;
   }
 
   if (
     candidate.district &&
     vacancy.district &&
-    candidate.district.trim().toLowerCase() === vacancy.district.trim().toLowerCase()
+    candidate.district.trim().toLowerCase() ===
+      vacancy.district.trim().toLowerCase()
   ) {
     score += 10;
   }
@@ -227,20 +239,29 @@ function buildFitReasons(candidate: CandidateItem, vacancy: VacancyItem) {
   ) {
     reasons.push("Роль полностью совпадает с вашим профилем");
   } else if (
-    candidate.primary_role.trim().toLowerCase().includes(vacancy.role.trim().toLowerCase()) ||
-    vacancy.role.trim().toLowerCase().includes(candidate.primary_role.trim().toLowerCase())
+    candidate.primary_role
+      .trim()
+      .toLowerCase()
+      .includes(vacancy.role.trim().toLowerCase()) ||
+    vacancy.role
+      .trim()
+      .toLowerCase()
+      .includes(candidate.primary_role.trim().toLowerCase())
   ) {
     reasons.push("Роль близка к вашему текущему профилю");
   }
 
-  if (candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()) {
+  if (
+    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+  ) {
     reasons.push("Вакансия находится в вашем городе");
   }
 
   if (
     candidate.district &&
     vacancy.district &&
-    candidate.district.trim().toLowerCase() === vacancy.district.trim().toLowerCase()
+    candidate.district.trim().toLowerCase() ===
+      vacancy.district.trim().toLowerCase()
   ) {
     reasons.push("Район совпадает с вашим предпочтением");
   }
@@ -266,7 +287,10 @@ function buildFitReasons(candidate: CandidateItem, vacancy: VacancyItem) {
   return reasons.slice(0, 4);
 }
 
-function buildNextStepText(existingMatch: MatchItem | null, vacancy: VacancyItem | null) {
+function buildNextStepText(
+  existingMatch: MatchItem | null,
+  vacancy: VacancyItem | null
+) {
   if (!existingMatch) {
     if (vacancy?.listing_type === "shift") {
       return "Если смена вам подходит, можно откликнуться сейчас. Дальше статус сразу появится в разделе откликов.";
@@ -301,7 +325,10 @@ function buildNextStepText(existingMatch: MatchItem | null, vacancy: VacancyItem
   }
 }
 
-function buildAfterApplySteps(existingMatch: MatchItem | null, vacancy: VacancyItem | null) {
+function buildAfterApplySteps(
+  existingMatch: MatchItem | null,
+  vacancy: VacancyItem | null
+) {
   if (existingMatch) {
     return [
       "Новый отклик создавать не нужно.",
@@ -350,7 +377,11 @@ function getListingTypeTone(type?: VacancyItem["listing_type"]) {
 }
 
 function formatShiftTimeLine(vacancy: VacancyItem) {
-  if (!vacancy.shift_date && !vacancy.shift_start_time && !vacancy.shift_end_time) {
+  if (
+    !vacancy.shift_date &&
+    !vacancy.shift_start_time &&
+    !vacancy.shift_end_time
+  ) {
     return null;
   }
 
@@ -367,7 +398,11 @@ function formatShiftTimeLine(vacancy: VacancyItem) {
   return date;
 }
 
-function getApplyButtonText(vacancy: VacancyItem, existingMatch: MatchItem | null, applying: boolean) {
+function getApplyButtonText(
+  vacancy: VacancyItem,
+  existingMatch: MatchItem | null,
+  applying: boolean
+) {
   if (existingMatch) {
     return "Отклик уже есть";
   }
@@ -385,6 +420,55 @@ function getApplyButtonText(vacancy: VacancyItem, existingMatch: MatchItem | nul
   }
 
   return "Откликнуться на вакансию";
+}
+
+function getVacancyCoverPhoto(vacancy: VacancyItem) {
+  if (!vacancy.photos || vacancy.photos.length === 0) {
+    return null;
+  }
+
+  return (
+    vacancy.photos.find((photo) => photo.is_cover) ||
+    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    null
+  );
+}
+
+function VacancyHeroPhoto({
+  vacancy,
+}: {
+  vacancy: VacancyItem;
+}) {
+  const coverPhoto = getVacancyCoverPhoto(vacancy);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (!coverPhoto || imageFailed) {
+    return (
+      <div className="relative flex h-56 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white sm:h-64">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(148,163,184,0.14),transparent_35%)]" />
+        <div className="relative flex flex-col items-center justify-center px-4 text-center">
+          <div className="rounded-2xl bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-slate-200">
+            {vacancy.venue_name}
+          </div>
+          <div className="mt-3 text-base font-semibold text-slate-800">
+            Фото вакансии пока не добавлено
+          </div>
+          <div className="mt-1 text-sm text-slate-500">{vacancy.role}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-56 w-full overflow-hidden bg-slate-100 sm:h-64">
+      <img
+        src={coverPhoto.photo_url}
+        alt={`${vacancy.venue_name} — ${vacancy.role}`}
+        className="h-full w-full object-cover"
+        onError={() => setImageFailed(true)}
+      />
+    </div>
+  );
 }
 
 export default function CandidateVacancyDetailsPage() {
@@ -415,11 +499,14 @@ export default function CandidateVacancyDetailsPage() {
 
       const candidateId = getCurrentCandidateId();
 
-      const [candidateResponse, vacancyResponse, matchesResponse] = await Promise.all([
-        fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
-        fetch(`/api/vacancies/${vacancyId}`, { cache: "no-store" }),
-        fetch(`/api/matches/?candidate_id=${candidateId}`, { cache: "no-store" }),
-      ]);
+      const [candidateResponse, vacancyResponse, matchesResponse] =
+        await Promise.all([
+          fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
+          fetch(`/api/vacancies/${vacancyId}`, { cache: "no-store" }),
+          fetch(`/api/matches/?candidate_id=${candidateId}`, {
+            cache: "no-store",
+          }),
+        ]);
 
       if (!candidateResponse.ok) {
         throw new Error("Не удалось загрузить данные кандидата");
@@ -609,6 +696,8 @@ export default function CandidateVacancyDetailsPage() {
   return (
     <main className={`space-y-5 px-4 py-5 ${isTelegram ? "" : "md:space-y-6 md:py-6"}`}>
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <VacancyHeroPhoto vacancy={vacancy} />
+
         <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -821,10 +910,12 @@ export default function CandidateVacancyDetailsPage() {
               <span className="font-medium text-slate-900">Город:</span> {vacancy.city}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Район:</span> {vacancy.district || "Не указан"}
+              <span className="font-medium text-slate-900">Район:</span>{" "}
+              {vacancy.district || "Не указан"}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Доход:</span> {formatIncomeText(vacancy.salary_text)}
+              <span className="font-medium text-slate-900">Доход:</span>{" "}
+              {formatIncomeText(vacancy.salary_text)}
             </div>
             <div>
               <span className="font-medium text-slate-900">
@@ -869,16 +960,19 @@ export default function CandidateVacancyDetailsPage() {
               <span className="font-medium text-slate-900">Имя:</span> {candidate.full_name}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Основная роль:</span> {candidate.primary_role}
+              <span className="font-medium text-slate-900">Основная роль:</span>{" "}
+              {candidate.primary_role}
             </div>
             <div>
               <span className="font-medium text-slate-900">Город:</span> {candidate.city}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Район:</span> {candidate.district || "Не указан"}
+              <span className="font-medium text-slate-900">Район:</span>{" "}
+              {candidate.district || "Не указан"}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Опыт:</span> {formatExperience(candidate.horeca_experience_months)}
+              <span className="font-medium text-slate-900">Опыт:</span>{" "}
+              {formatExperience(candidate.horeca_experience_months)}
             </div>
             <div>
               <span className="font-medium text-slate-900">Готовность выйти:</span>{" "}

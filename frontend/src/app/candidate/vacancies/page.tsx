@@ -18,6 +18,14 @@ type CandidateItem = {
   is_active: boolean;
 };
 
+type VacancyPhoto = {
+  id: number;
+  vacancy_id: number;
+  photo_url: string;
+  sort_order: number;
+  is_cover: boolean;
+};
+
 type VacancyItem = {
   id: number;
   employer_id: number;
@@ -35,6 +43,7 @@ type VacancyItem = {
   urgent_flag?: boolean;
   slots_count?: number | null;
   status: string;
+  photos?: VacancyPhoto[];
 };
 
 type MatchItem = {
@@ -466,6 +475,59 @@ function getPrimaryActionText(vacancy: VacancyCardItem) {
   return "Открыть вакансию";
 }
 
+function getVacancyCoverPhoto(vacancy: VacancyItem) {
+  if (!vacancy.photos || vacancy.photos.length === 0) {
+    return null;
+  }
+
+  return (
+    vacancy.photos.find((photo) => photo.is_cover) ||
+    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    null
+  );
+}
+
+function VacancyPhotoBlock({
+  vacancy,
+  roleEmoji,
+}: {
+  vacancy: VacancyItem;
+  roleEmoji: string;
+}) {
+  const coverPhoto = getVacancyCoverPhoto(vacancy);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (!coverPhoto || imageFailed) {
+    return (
+      <div className="relative flex h-48 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(148,163,184,0.14),transparent_35%)]" />
+        <div className="relative flex flex-col items-center justify-center px-4 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/90 text-2xl shadow-sm ring-1 ring-slate-200">
+            {roleEmoji}
+          </div>
+          <div className="mt-3 text-sm font-medium text-slate-700">
+            Фото вакансии пока не добавлено
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {vacancy.venue_name}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-48 w-full overflow-hidden bg-slate-100">
+      <img
+        src={coverPhoto.photo_url}
+        alt={`${vacancy.venue_name} — ${vacancy.role}`}
+        className="h-full w-full object-cover"
+        onError={() => setImageFailed(true)}
+      />
+    </div>
+  );
+}
+
 export default function CandidateVacanciesPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
@@ -735,7 +797,7 @@ export default function CandidateVacanciesPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm col-span-2 sm:col-span-1">
+        <div className="col-span-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:col-span-1">
           <div className="text-xs text-slate-500">С откликом</div>
           <div className="mt-2 text-xl font-semibold text-slate-900">
             {stats.applied}
@@ -807,6 +869,8 @@ export default function CandidateVacanciesPage() {
                   key={vacancy.id}
                   className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
                 >
+                  <VacancyPhotoBlock vacancy={vacancy} roleEmoji={roleEmoji} />
+
                   <div className={`bg-gradient-to-br ${roleGradient} p-4`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -839,7 +903,8 @@ export default function CandidateVacanciesPage() {
                             {vacancy.venue_name}
                           </div>
 
-                          {vacancy.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
+                          {vacancy.listing_type === "shift" &&
+                          formatShiftTimeLine(vacancy) ? (
                             <div className="text-sm font-medium text-slate-700">
                               {formatShiftTimeLine(vacancy)}
                             </div>

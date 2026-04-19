@@ -32,6 +32,10 @@ type VacancyForm = {
 
 type FieldErrors = Partial<Record<keyof VacancyForm, string>>;
 
+type CreatedVacancyResponse = {
+  id: number;
+};
+
 function validateForm(form: VacancyForm): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -114,6 +118,12 @@ function listingTypeDescription(type: ListingType) {
   }
 }
 
+function photoButtonClass(disabled?: boolean) {
+  return `inline-flex cursor-pointer items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 ${
+    disabled ? "pointer-events-none opacity-60" : ""
+  }`;
+}
+
 export default function EmployerCreateVacancyPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -142,6 +152,10 @@ export default function EmployerCreateVacancyPage() {
   const [successText, setSuccessText] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
+  const [photoErrorText, setPhotoErrorText] = useState("");
+
   const isEmployerIdValid = useMemo(() => Number.isFinite(employerId), [employerId]);
   const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
   const isShift = form.listing_type === "shift";
@@ -151,6 +165,14 @@ export default function EmployerCreateVacancyPage() {
       window.localStorage.setItem("hubsty_employer_id", String(employerId));
     }
   }, [employerId]);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) {
+        URL.revokeObjectURL(photoPreviewUrl);
+      }
+    };
+  }, [photoPreviewUrl]);
 
   function updateField<K extends keyof VacancyForm>(key: K, value: VacancyForm[K]) {
     setForm((prev) => {
@@ -185,10 +207,71 @@ export default function EmployerCreateVacancyPage() {
     setSuccessText("");
   }
 
+  function handlePhotoChange(file: File | null) {
+    setPhotoErrorText("");
+    setErrorText("");
+    setSuccessText("");
+
+    if (photoPreviewUrl) {
+      URL.revokeObjectURL(photoPreviewUrl);
+      setPhotoPreviewUrl("");
+    }
+
+    if (!file) {
+      setSelectedPhotoFile(null);
+      return;
+    }
+
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+    if (!allowedTypes.includes(file.type)) {
+      setSelectedPhotoFile(null);
+      setPhotoErrorText("Поддерживаются JPG, PNG или WEBP");
+      return;
+    }
+
+    const maxSizeMb = 10;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      setSelectedPhotoFile(null);
+      setPhotoErrorText("Фото должно быть меньше 10 МБ");
+      return;
+    }
+
+    setSelectedPhotoFile(file);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+  }
+
+  async function uploadVacancyPhoto(vacancyId: number, file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`/api/vacancies/${vacancyId}/photo`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      let detail = `Фото не удалось загрузить (${response.status})`;
+
+      if (text.trim()) {
+        try {
+          const data = JSON.parse(text) as { detail?: string; message?: string };
+          detail = data.detail || data.message || text;
+        } catch {
+          detail = text;
+        }
+      }
+
+      throw new Error(detail);
+    }
+  }
+
   async function saveVacancy() {
     try {
       setErrorText("");
       setSuccessText("");
+      setPhotoErrorText("");
 
       const validationErrors = validateForm(form);
       setFieldErrors(validationErrors);
@@ -240,8 +323,6 @@ export default function EmployerCreateVacancyPage() {
         status: form.status,
       };
 
-      console.log("vacancy payload", payload);
-
       const response = await fetch("/api/vacancies/", {
         method: "POST",
         headers: {
@@ -251,7 +332,7 @@ export default function EmployerCreateVacancyPage() {
       });
 
       const text = await response.text();
-      let data: any = null;
+      let data: CreatedVacancyResponse | { detail?: string; message?: string } | null = null;
 
       if (text.trim()) {
         try {
@@ -263,8 +344,8 @@ export default function EmployerCreateVacancyPage() {
 
       if (!response.ok) {
         const backendMessage =
-          data?.detail ||
-          data?.message ||
+          (data as { detail?: string; message?: string } | null)?.detail ||
+          (data as { detail?: string; message?: string } | null)?.message ||
           text ||
           `Не удалось создать вакансию (${response.status})`;
 
@@ -278,11 +359,37 @@ export default function EmployerCreateVacancyPage() {
         throw new Error(backendMessage);
       }
 
-      setSuccessText("Вакансия успешно создана");
+      const createdVacancyId =
+        typeof (data as CreatedVacancyResponse | null)?.id === "number"
+          ? (data as CreatedVacancyResponse).id
+          : null;
+
+      if (selectedPhotoFile && createdVacancyId) {
+        try {
+          await uploadVacancyPhoto(createdVacancyId, selectedPhotoFile);
+          setSuccessText("Вакансия и фото успешно сохранены");
+        } catch (photoError) {
+          console.error(photoError);
+          if (photoError instanceof Error) {
+            setErrorText(
+              `Вакансия создана, но фото не загрузилось: ${photoError.message}`
+            );
+          } else {
+            setErrorText("Вакансия создана, но фото не загрузилось");
+          }
+          setSuccessText("Вакансия создана");
+        }
+      } else {
+        setSuccessText(
+          selectedPhotoFile && !createdVacancyId
+            ? "Вакансия создана. Фото пока не удалось привязать автоматически."
+            : "Вакансия успешно создана"
+        );
+      }
 
       setTimeout(() => {
         router.push(`/employer/${employerId}`);
-      }, 700);
+      }, 900);
     } catch (error) {
       console.error(error);
 
@@ -360,6 +467,89 @@ export default function EmployerCreateVacancyPage() {
           {successText}
         </div>
       ) : null}
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div>
+          <div className="text-sm font-medium text-slate-700">Фото вакансии</div>
+          <div className="mt-1 text-sm text-slate-500">
+            Одно фото. Оно будет показано кандидатам в карточке и на странице вакансии.
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-[240px_1fr]">
+          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+            {photoPreviewUrl ? (
+              <img
+                src={photoPreviewUrl}
+                alt="Превью фото вакансии"
+                className="h-56 w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-56 w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-50 to-white px-4 text-center">
+                <div className="text-3xl">🏢</div>
+                <div className="mt-3 text-sm font-medium text-slate-700">
+                  Фото пока не выбрано
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  Добавьте фото заведения или вакансии
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col justify-between rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <div className="text-sm font-medium text-slate-900">
+                Что лучше загрузить
+              </div>
+              <div className="mt-2 text-sm leading-6 text-slate-600">
+                Лучше всего работает живое фото заведения, бара, кухни, зала или
+                рабочей зоны. Так кандидат быстрее понимает формат места.
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <label className={photoButtonClass(saving)}>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    className="hidden"
+                    disabled={saving}
+                    onChange={(e) => handlePhotoChange(e.target.files?.[0] || null)}
+                  />
+                  {selectedPhotoFile ? "Изменить фото" : "Добавить фото"}
+                </label>
+
+                {selectedPhotoFile ? (
+                  <button
+                    type="button"
+                    onClick={() => handlePhotoChange(null)}
+                    disabled={saving}
+                    className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Убрать
+                  </button>
+                ) : null}
+              </div>
+
+              {selectedPhotoFile ? (
+                <div className="mt-4 text-sm text-slate-600">
+                  Выбрано: <span className="font-medium text-slate-900">{selectedPhotoFile.name}</span>
+                </div>
+              ) : null}
+
+              {photoErrorText ? (
+                <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {photoErrorText}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4 text-xs text-slate-500">
+              Поддерживаются JPG, PNG, WEBP. До 10 МБ.
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="text-sm font-medium text-slate-700">Тип объявления *</div>

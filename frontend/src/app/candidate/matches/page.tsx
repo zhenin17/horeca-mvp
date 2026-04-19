@@ -18,6 +18,14 @@ type CandidateItem = {
   is_active: boolean;
 };
 
+type VacancyPhoto = {
+  id: number;
+  vacancy_id: number;
+  photo_url: string;
+  sort_order: number;
+  is_cover: boolean;
+};
+
 type VacancyItem = {
   id: number;
   employer_id: number;
@@ -35,6 +43,7 @@ type VacancyItem = {
   urgent_flag?: boolean;
   slots_count?: number | null;
   status: string;
+  photos?: VacancyPhoto[];
 };
 
 type EmployerItem = {
@@ -429,6 +438,54 @@ function belongsToListingTypeFilter(
   return (item.vacancy?.listing_type || "job") === filter;
 }
 
+function getVacancyCoverPhoto(vacancy?: VacancyItem | null) {
+  if (!vacancy?.photos || vacancy.photos.length === 0) {
+    return null;
+  }
+
+  return (
+    vacancy.photos.find((photo) => photo.is_cover) ||
+    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    null
+  );
+}
+
+function VacancyMatchPhoto({
+  vacancy,
+}: {
+  vacancy?: VacancyItem | null;
+}) {
+  const coverPhoto = getVacancyCoverPhoto(vacancy);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (!coverPhoto || imageFailed) {
+    return (
+      <div className="flex h-40 w-full items-center justify-center overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 via-slate-50 to-white md:h-full">
+        <div className="px-4 text-center">
+          <div className="text-3xl">🏢</div>
+          <div className="mt-3 text-sm font-medium text-slate-700">
+            Фото вакансии пока не добавлено
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {vacancy?.venue_name || "Без названия"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-40 w-full overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 md:h-full">
+      <img
+        src={coverPhoto.photo_url}
+        alt={`${vacancy?.venue_name || "Вакансия"} — ${vacancy?.role || ""}`}
+        className="h-full w-full object-cover"
+        onError={() => setImageFailed(true)}
+      />
+    </div>
+  );
+}
+
 export default function CandidateMatchesPage() {
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
@@ -774,169 +831,173 @@ export default function CandidateMatchesPage() {
                   match.status
                 )}`}
               >
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${statusPillClasses(
-                            match.status
-                          )}`}
-                        >
-                          {statusLabel(match.status)}
-                        </span>
+                <div className="grid gap-4 md:grid-cols-[220px_1fr]">
+                  <VacancyMatchPhoto vacancy={vacancy} />
 
-                        <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          Совпадение: {scoreLabel(score)} · {score}
-                        </span>
-
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
-                            vacancy?.listing_type
-                          )}`}
-                        >
-                          {getListingTypeLabel(vacancy?.listing_type)}
-                        </span>
-
-                        {vacancy?.urgent_flag ? (
-                          <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
-                            Срочно
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${statusPillClasses(
+                              match.status
+                            )}`}
+                          >
+                            {statusLabel(match.status)}
                           </span>
-                        ) : null}
-                      </div>
 
-                      <h2 className="mt-3 text-xl font-semibold text-slate-900">
-                        {vacancy?.role || "Вакансия"}
-                      </h2>
+                          <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-700">
+                            Совпадение: {scoreLabel(score)} · {score}
+                          </span>
 
-                      <div className="mt-1 text-sm text-slate-700">
-                        {vacancy?.venue_name || "Без названия"}
-                      </div>
-
-                      {vacancy?.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
-                        <div className="mt-2 text-sm font-medium text-slate-700">
-                          {formatShiftTimeLine(vacancy)}
-                        </div>
-                      ) : null}
-
-                      {employer ? (
-                        <div className="mt-1 text-sm text-slate-500">
-                          Работодатель: {employer.company_name}
-                        </div>
-                      ) : null}
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          {compactLocation(vacancy)}
-                        </span>
-                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          Доход: {compactSalary(vacancy?.salary_text)}
-                        </span>
-                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          {vacancy?.listing_type === "shift"
-                            ? `Дата и время: ${formatShiftTimeLine(vacancy) || "Не указаны"}`
-                            : `График: ${vacancy?.schedule_text || "Не указан"}`}
-                        </span>
-                        <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
-                          Выход: {formatReadyToStart(vacancy?.needed_start)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="w-full md:w-[340px]">
-                      <div className="rounded-2xl bg-white/80 p-4">
-                        <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
-                          Что это значит
-                        </div>
-
-                        <div className="mt-2 text-sm font-medium text-slate-900">
-                          {statusHint(match.status)}
-                        </div>
-
-                        <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
-                          {nextStepHint(match.status)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {match.comment ? (
-                    <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
-                      <span className="font-medium text-slate-900">
-                        Комментарий:
-                      </span>{" "}
-                      {match.comment}
-                    </div>
-                  ) : null}
-
-                  {contactOpened ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-white/90 p-4">
-                      <div className="text-sm font-semibold text-emerald-900">
-                        Можно связаться с работодателем
-                      </div>
-
-                      <div className="mt-2 space-y-1 text-sm text-emerald-900">
-                        <div>
-                          Компания: {employer?.company_name || "Не указано"}
-                        </div>
-                        <div>
-                          Контакт: {employer?.contact_name || "Не указано"}
-                        </div>
-                        <div>
-                          Телефон: {employer?.phone || "Не указан"}
-                        </div>
-                        <div>
-                          Telegram:{" "}
-                          {employer?.telegram_username
-                            ? `@${employer.telegram_username}`
-                            : "Не указан"}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                        {phoneHref ? (
-                          <a
-                            href={phoneHref}
-                            className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-medium ${getListingTypeTone(
+                              vacancy?.listing_type
+                            )}`}
                           >
-                            Позвонить
-                          </a>
-                        ) : null}
+                            {getListingTypeLabel(vacancy?.listing_type)}
+                          </span>
 
-                        {telegramHref ? (
-                          <a
-                            href={telegramHref}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
-                          >
-                            Написать в Telegram
-                          </a>
-                        ) : null}
+                          {vacancy?.urgent_flag ? (
+                            <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 ring-1 ring-rose-100">
+                              Срочно
+                            </span>
+                          ) : null}
+                        </div>
 
-                        {!phoneHref && !telegramHref ? (
-                          <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            Контакт открыт, но у работодателя не заполнены телефон и Telegram.
+                        <h2 className="mt-3 text-xl font-semibold text-slate-900">
+                          {vacancy?.role || "Вакансия"}
+                        </h2>
+
+                        <div className="mt-1 text-sm text-slate-700">
+                          {vacancy?.venue_name || "Без названия"}
+                        </div>
+
+                        {vacancy?.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
+                          <div className="mt-2 text-sm font-medium text-slate-700">
+                            {formatShiftTimeLine(vacancy)}
                           </div>
                         ) : null}
+
+                        {employer ? (
+                          <div className="mt-1 text-sm text-slate-500">
+                            Работодатель: {employer.company_name}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
+                            {compactLocation(vacancy)}
+                          </span>
+                          <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
+                            Доход: {compactSalary(vacancy?.salary_text)}
+                          </span>
+                          <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
+                            {vacancy?.listing_type === "shift"
+                              ? `Дата и время: ${formatShiftTimeLine(vacancy) || "Не указаны"}`
+                              : `График: ${vacancy?.schedule_text || "Не указан"}`}
+                          </span>
+                          <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
+                            Выход: {formatReadyToStart(vacancy?.needed_start)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="w-full md:w-[340px]">
+                        <div className="rounded-2xl bg-white/80 p-4">
+                          <div className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                            Что это значит
+                          </div>
+
+                          <div className="mt-2 text-sm font-medium text-slate-900">
+                            {statusHint(match.status)}
+                          </div>
+
+                          <div className="mt-3 rounded-2xl bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-700">
+                            {nextStepHint(match.status)}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  ) : null}
 
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <Link
-                      href={`/candidate/vacancies/${match.vacancy_id}`}
-                      className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-                    >
-                      {getOpenActionText(vacancy)}
-                    </Link>
+                    {match.comment ? (
+                      <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
+                        <span className="font-medium text-slate-900">
+                          Комментарий:
+                        </span>{" "}
+                        {match.comment}
+                      </div>
+                    ) : null}
 
-                    <Link
-                      href="/candidate/vacancies"
-                      className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
-                    >
-                      Смотреть другие вакансии
-                    </Link>
+                    {contactOpened ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-white/90 p-4">
+                        <div className="text-sm font-semibold text-emerald-900">
+                          Можно связаться с работодателем
+                        </div>
+
+                        <div className="mt-2 space-y-1 text-sm text-emerald-900">
+                          <div>
+                            Компания: {employer?.company_name || "Не указано"}
+                          </div>
+                          <div>
+                            Контакт: {employer?.contact_name || "Не указано"}
+                          </div>
+                          <div>
+                            Телефон: {employer?.phone || "Не указан"}
+                          </div>
+                          <div>
+                            Telegram:{" "}
+                            {employer?.telegram_username
+                              ? `@${employer.telegram_username}`
+                              : "Не указан"}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                          {phoneHref ? (
+                            <a
+                              href={phoneHref}
+                              className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                            >
+                              Позвонить
+                            </a>
+                          ) : null}
+
+                          {telegramHref ? (
+                            <a
+                              href={telegramHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                            >
+                              Написать в Telegram
+                            </a>
+                          ) : null}
+
+                          {!phoneHref && !telegramHref ? (
+                            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                              Контакт открыт, но у работодателя не заполнены телефон и Telegram.
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Link
+                        href={`/candidate/vacancies/${match.vacancy_id}`}
+                        className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                      >
+                        {getOpenActionText(vacancy)}
+                      </Link>
+
+                      <Link
+                        href="/candidate/vacancies"
+                        className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
+                      >
+                        Смотреть другие вакансии
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </article>
