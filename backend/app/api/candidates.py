@@ -7,10 +7,13 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.core.db import get_db
 from app.models.candidate import Candidate
+from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
 from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.schemas.candidate import (
+    CandidateAvailabilityCreate,
+    CandidateAvailabilityRead,
     CandidateCreate,
     CandidatePhotoCreate,
     CandidatePhotoRead,
@@ -26,6 +29,8 @@ router = APIRouter(prefix="/candidates", tags=["Candidates"])
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 UPLOADS_DIR = BASE_DIR / "uploads"
 CANDIDATE_UPLOADS_DIR = UPLOADS_DIR / "candidates"
+
+ALLOWED_SLOT_TYPES = {"morning", "day", "evening", "night", "full_day"}
 
 
 @router.post("/", response_model=CandidateRead)
@@ -99,6 +104,70 @@ def update_candidate(candidate_id: int, payload: CandidateCreate, db: Session = 
         .filter(Candidate.id == candidate_id)
         .first()
     )
+
+
+@router.get("/{candidate_id}/availability", response_model=list[CandidateAvailabilityRead])
+def list_candidate_availability(candidate_id: int, db: Session = Depends(get_db)):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return (
+        db.query(CandidateAvailability)
+        .filter(CandidateAvailability.candidate_id == candidate_id)
+        .order_by(
+            CandidateAvailability.available_date.asc(),
+            CandidateAvailability.id.asc(),
+        )
+        .all()
+    )
+
+
+@router.post("/{candidate_id}/availability", response_model=CandidateAvailabilityRead)
+def create_candidate_availability(
+    candidate_id: int,
+    payload: CandidateAvailabilityCreate,
+    db: Session = Depends(get_db),
+):
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if payload.slot_type not in ALLOWED_SLOT_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid slot_type")
+
+    availability = CandidateAvailability(
+        candidate_id=candidate_id,
+        available_date=payload.available_date,
+        slot_type=payload.slot_type,
+        start_time=payload.start_time,
+        end_time=payload.end_time,
+        is_active=payload.is_active,
+    )
+    db.add(availability)
+    db.commit()
+    db.refresh(availability)
+    return availability
+
+
+@router.delete("/{candidate_id}/availability/{availability_id}")
+def delete_candidate_availability(
+    candidate_id: int,
+    availability_id: int,
+    db: Session = Depends(get_db),
+):
+    availability = (
+        db.query(CandidateAvailability)
+        .filter(CandidateAvailability.id == availability_id)
+        .filter(CandidateAvailability.candidate_id == candidate_id)
+        .first()
+    )
+    if not availability:
+        raise HTTPException(status_code=404, detail="Availability not found")
+
+    db.delete(availability)
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/{candidate_id}/photos", response_model=list[CandidatePhotoRead])

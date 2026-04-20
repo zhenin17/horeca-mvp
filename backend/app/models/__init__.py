@@ -1,4 +1,5 @@
 from app.models.candidate import Candidate
+from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
 from app.models.employer import Employer
 from app.models.funnel_event import FunnelEvent
@@ -8,6 +9,7 @@ from app.models.vacancy_photo import VacancyPhoto
 
 __all__ = [
     "Candidate",
+    "CandidateAvailability",
     "CandidatePhoto",
     "Employer",
     "Vacancy",

@@ -44,3 +44,9 @@ class Candidate(Base):
         cascade="all, delete-orphan",
         order_by="CandidatePhoto.sort_order.asc()",
     )
+    availability = relationship(
+        "CandidateAvailability",
+        back_populates="candidate",
+        cascade="all, delete-orphan",
+        order_by="CandidateAvailability.available_date.asc()",
+    )

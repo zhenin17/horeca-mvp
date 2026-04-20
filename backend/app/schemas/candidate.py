@@ -1,6 +1,28 @@
+from datetime import date
 from typing import Optional
 
 from pydantic import BaseModel
+
+
+class CandidateAvailabilityCreate(BaseModel):
+    available_date: date
+    slot_type: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_active: bool = True
+
+
+class CandidateAvailabilityRead(BaseModel):
+    id: int
+    candidate_id: int
+    available_date: date
+    slot_type: str
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    is_active: bool
+
+    class Config:
+        from_attributes = True
 
 
 class CandidatePhotoCreate(BaseModel):
