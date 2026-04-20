@@ -4,6 +4,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from app.api.app_public import router as app_public_router
 from app.api.candidates import router as candidates_router
 from app.api.employers import router as employers_router
 from app.api.funnel_events import router as funnel_events_router
@@ -52,6 +53,7 @@ def serve_upload(file_path: str):
     return FileResponse(target)
 
 
+app.include_router(app_public_router)
 app.include_router(candidates_router)
 app.include_router(employers_router)
 app.include_router(vacancies_router)

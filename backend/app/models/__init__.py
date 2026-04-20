@@ -1,3 +1,5 @@
+from app.models.app_document import AppDocument
+from app.models.app_setting import AppSetting
 from app.models.candidate import Candidate
 from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
@@ -8,6 +10,8 @@ from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.models.vacancy_photo import VacancyPhoto
 
 __all__ = [
+    "AppDocument",
+    "AppSetting",
     "Candidate",
     "CandidateAvailability",
     "CandidatePhoto",
