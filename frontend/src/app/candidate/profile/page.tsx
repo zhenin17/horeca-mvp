@@ -699,6 +699,13 @@ export default function CandidateProfilePage() {
           </Link>
 
           <Link
+            href="/about"
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            О приложении
+          </Link>
+
+          <Link
             href="/candidate/start"
             className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
           >

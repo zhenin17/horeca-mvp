@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getTelegramBootstrapUser, prepareTelegramWebApp } from "@/lib/telegram";
 
@@ -33,6 +34,8 @@ type EmployerForm = {
   website: string;
 };
 
+const CONSENT_STORAGE_KEY = "hubsty_entry_consent_v1";
+
 function getSavedRole(): RoleChoice | null {
   if (typeof window === "undefined") {
     return null;
@@ -50,8 +53,54 @@ function resetSavedRole() {
   window.localStorage.removeItem("hubsty_active_role");
 }
 
+function getConsentAccepted(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(CONSENT_STORAGE_KEY) === "accepted";
+}
+
+function saveConsentAccepted() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(CONSENT_STORAGE_KEY, "accepted");
+}
+
 function inputClass() {
   return "w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900";
+}
+
+function primaryRoleButtonClass(disabled?: boolean) {
+  return `rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+    disabled
+      ? "cursor-not-allowed bg-slate-300 text-white"
+      : "bg-slate-900 text-white hover:opacity-90"
+  }`;
+}
+
+function secondaryButtonClass(disabled?: boolean) {
+  return `rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 ${
+    disabled ? "pointer-events-none opacity-60" : ""
+  }`;
+}
+
+function compactLinkButtonClass() {
+  return "text-sm font-medium text-slate-600 underline underline-offset-4 hover:text-slate-900";
+}
+
+function currentRoleLabel(role: RoleChoice | null) {
+  if (role === "candidate") {
+    return "Кандидат";
+  }
+
+  if (role === "employer") {
+    return "Работодатель";
+  }
+
+  return "Не выбрана";
 }
 
 export default function TelegramEntryPage() {
@@ -61,6 +110,9 @@ export default function TelegramEntryPage() {
   const [telegramUser, setTelegramUser] = useState<TelegramAuthResponse | null>(null);
   const [createRole, setCreateRole] = useState<RoleChoice | null>(null);
   const [savedRole, setSavedRole] = useState<RoleChoice | null>(null);
+
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   const [candidateForm, setCandidateForm] = useState<CandidateForm>({
     full_name: "",
@@ -89,6 +141,7 @@ export default function TelegramEntryPage() {
 
         prepareTelegramWebApp();
         setSavedRole(getSavedRole());
+        setConsentAccepted(getConsentAccepted());
 
         const user = getTelegramBootstrapUser();
 
@@ -145,6 +198,21 @@ export default function TelegramEntryPage() {
     void bootstrap();
   }, []);
 
+  function ensureConsentBeforeContinue() {
+    if (consentAccepted) {
+      return true;
+    }
+
+    if (consentChecked) {
+      saveConsentAccepted();
+      setConsentAccepted(true);
+      return true;
+    }
+
+    setErrorText("Чтобы продолжить, подтвердите согласие с документами.");
+    return false;
+  }
+
   function saveRole(role: RoleChoice, authData?: TelegramAuthResponse) {
     if (typeof window === "undefined") {
       return;
@@ -152,6 +220,10 @@ export default function TelegramEntryPage() {
 
     const data = authData || telegramUser;
     if (!data) {
+      return;
+    }
+
+    if (!ensureConsentBeforeContinue()) {
       return;
     }
 
@@ -193,6 +265,10 @@ export default function TelegramEntryPage() {
 
   async function createCandidateProfile() {
     if (!telegramUser) {
+      return;
+    }
+
+    if (!ensureConsentBeforeContinue()) {
       return;
     }
 
@@ -270,6 +346,10 @@ export default function TelegramEntryPage() {
 
   async function createEmployerProfile() {
     if (!telegramUser) {
+      return;
+    }
+
+    if (!ensureConsentBeforeContinue()) {
       return;
     }
 
@@ -384,12 +464,15 @@ export default function TelegramEntryPage() {
     <main className="space-y-6 px-4 py-6">
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5 md:p-6">
-          <p className="text-sm font-medium text-slate-500">Telegram вход</p>
+          <p className="text-sm font-medium text-slate-500">Hubsty mini app</p>
+
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-            Выберите роль
+            Продолжить в Hubsty
           </h1>
+
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Здесь можно продолжить в уже созданной роли или добавить вторую.
+            Выберите, в каком режиме открыть приложение сейчас. Роль можно будет
+            сменить позже на этом же экране.
           </p>
 
           <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
@@ -398,40 +481,72 @@ export default function TelegramEntryPage() {
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Текущее состояние
+              Ваши профили
             </div>
 
             <div className="mt-2 text-sm text-slate-700">
               Активная роль:{" "}
-              <span className="font-semibold">
-                {savedRole === "candidate"
-                  ? "Кандидат"
-                  : savedRole === "employer"
-                    ? "Работодатель"
-                    : "Не выбрана"}
-              </span>
+              <span className="font-semibold">{currentRoleLabel(savedRole)}</span>
             </div>
 
             <div className="mt-2 text-sm text-slate-600">
-              Профиль кандидата: {hasCandidate ? "есть" : "нет"} · Профиль работодателя:{" "}
+              Кандидат: {hasCandidate ? "есть" : "нет"} · Работодатель:{" "}
               {hasEmployer ? "есть" : "нет"}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  resetSavedRole();
-                  setSavedRole(null);
-                  setCreateRole(null);
-                  setErrorText("");
-                }}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Сбросить текущую роль
-              </button>
-            </div>
+            {savedRole ? (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetSavedRole();
+                    setSavedRole(null);
+                    setCreateRole(null);
+                    setErrorText("");
+                  }}
+                  className={compactLinkButtonClass()}
+                >
+                  Сбросить текущую роль
+                </button>
+              </div>
+            ) : null}
           </div>
+
+          {!consentAccepted ? (
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={consentChecked}
+                  onChange={(e) => {
+                    setConsentChecked(e.target.checked);
+                    if (errorText === "Чтобы продолжить, подтвердите согласие с документами.") {
+                      setErrorText("");
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 rounded border-slate-300"
+                />
+                <span className="text-sm leading-6 text-slate-600">
+                  Продолжая, я принимаю{" "}
+                  <Link href="/about?doc=terms_of_use" className="underline underline-offset-4">
+                    Пользовательское соглашение
+                  </Link>
+                  ,{" "}
+                  <Link
+                    href="/about?doc=privacy_policy"
+                    className="underline underline-offset-4"
+                  >
+                    Политику конфиденциальности
+                  </Link>{" "}
+                  и даю{" "}
+                  <Link href="/about?doc=pd_agreement" className="underline underline-offset-4">
+                    согласие на обработку персональных данных
+                  </Link>
+                  .
+                </span>
+              </label>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -454,18 +569,21 @@ export default function TelegramEntryPage() {
                 <button
                   type="button"
                   onClick={() => saveRole("candidate")}
-                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                  className={primaryRoleButtonClass(!consentAccepted && !consentChecked)}
                 >
-                  Продолжить как кандидат
+                  Войти как кандидат
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => {
+                    if (!ensureConsentBeforeContinue()) {
+                      return;
+                    }
                     setErrorText("");
                     setCreateRole("candidate");
                   }}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className={secondaryButtonClass()}
                 >
                   Создать роль кандидата
                 </button>
@@ -484,18 +602,21 @@ export default function TelegramEntryPage() {
                 <button
                   type="button"
                   onClick={() => saveRole("employer")}
-                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+                  className={primaryRoleButtonClass(!consentAccepted && !consentChecked)}
                 >
-                  Продолжить как работодатель
+                  Войти как работодатель
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => {
+                    if (!ensureConsentBeforeContinue()) {
+                      return;
+                    }
                     setErrorText("");
                     setCreateRole("employer");
                   }}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className={secondaryButtonClass()}
                 >
                   Создать роль работодателя
                 </button>
