@@ -71,13 +71,10 @@ type MatchItem = {
 
 type CandidateReliability = {
   candidate_id: number;
-  total_matches: number;
-  invited_count: number;
-  interviewed_count: number;
-  hired_count: number;
-  rejected_count: number;
+  score: number;
+  worked_count: number;
   no_show_count: number;
-  reliability_score: number;
+  cancelled_count: number;
 };
 
 type CandidateFilter = "new" | "in_work" | "finished" | "all";
@@ -134,20 +131,44 @@ function matchStatusLabel(status: string) {
   }
 }
 
-function reliabilityLabel(score?: number) {
+function getReliabilityMeta(score?: number) {
   if (score === undefined) {
-    return "Без оценки";
+    return {
+      label: "Без оценки",
+      badgeClassName: "bg-slate-100 text-slate-700",
+      helperText: "Истории пока недостаточно, чтобы сформировать ориентир по выходам.",
+    };
   }
+
   if (score >= 80) {
-    return "Надежный";
+    return {
+      label: "Высокая надежность",
+      badgeClassName: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+      helperText: "Оценка формируется по истории выходов и отмен.",
+    };
   }
+
   if (score >= 60) {
-    return "Проверенный";
+    return {
+      label: "Хорошая надежность",
+      badgeClassName: "bg-sky-50 text-sky-700 ring-1 ring-sky-100",
+      helperText: "Оценка формируется по истории выходов и отмен.",
+    };
   }
+
   if (score >= 40) {
-    return "Новый";
+    return {
+      label: "Пока мало истории",
+      badgeClassName: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+      helperText: "Это не запрет, а ориентир для работодателя.",
+    };
   }
-  return "Рискованный";
+
+  return {
+    label: "Есть риск по выходам",
+    badgeClassName: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+    helperText: "Это не запрет, а ориентир для работодателя.",
+  };
 }
 
 function formatExperience(months: number) {
@@ -483,8 +504,8 @@ function buildCandidateFitReasons(
     reasons.push(`Может выйти: ${formatReadyToStart(match.candidate.ready_to_start)}`);
   }
 
-  if (reliability && reliability.reliability_score >= 60) {
-    reasons.push(`Надежность: ${reliabilityLabel(reliability.reliability_score)}`);
+  if (reliability?.score !== undefined && reliability.score >= 60) {
+    reasons.push(`Надежность: ${getReliabilityMeta(reliability.score).label}`);
   }
 
   if (reasons.length === 0) {
@@ -1139,7 +1160,7 @@ export default function EmployerDashboardPage() {
                 Обновить
               </button>
               <Link
-                href="/about"
+                href={`/about?from=/employer/${employer.id}`}
                 className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 О приложении
@@ -1157,7 +1178,7 @@ export default function EmployerDashboardPage() {
             </div>
 
             <div className="mt-3 text-sm text-slate-600">
-              Совет: начните с вакансий, где есть новые кандидаты и требуется быстрое решение.
+              Совет: начните с вакансии, которая сейчас выбрана ниже, и сначала разберите новых кандидатов по ней.
             </div>
           </div>
 
@@ -1579,6 +1600,7 @@ export default function EmployerDashboardPage() {
               <div className="mt-4 space-y-4">
                 {selectedVacancyMatches.map((match) => {
                   const reliability = reliabilityByCandidateId[match.candidate_id];
+                  const reliabilityMeta = getReliabilityMeta(reliability?.score);
                   const actions = getAvailableActions(match.status);
                   const contactsOpened = shouldShowContacts(match.status);
                   const fitReasons = buildCandidateFitReasons(
@@ -1643,43 +1665,83 @@ export default function EmployerDashboardPage() {
                               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
                                 {matchStatusLabel(match.status)}
                               </span>
-
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                                {reliability
-                                  ? `Надежность: ${reliabilityLabel(
-                                      reliability.reliability_score
-                                    )} (${reliability.reliability_score})`
-                                  : "Надежность: без оценки"}
-                              </span>
                             </div>
                           </div>
 
                           <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-                            <div className="rounded-2xl bg-slate-50 p-4">
-                              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                                Почему подходит
-                              </div>
-
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {fitReasons.map((reason) => (
-                                  <span
-                                    key={reason}
-                                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
-                                  >
-                                    {reason}
-                                  </span>
-                                ))}
-                              </div>
-
-                              <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
-                                {getMatchStatusHint(match.status)}
-                              </div>
-
-                              {match.comment ? (
-                                <div className="mt-4 text-sm text-slate-500">
-                                  Комментарий: {match.comment}
+                            <div className="space-y-4">
+                              <div className="rounded-2xl bg-slate-50 p-4">
+                                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                  Почему подходит
                                 </div>
-                              ) : null}
+
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {fitReasons.map((reason) => (
+                                    <span
+                                      key={reason}
+                                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
+                                    >
+                                      {reason}
+                                    </span>
+                                  ))}
+                                </div>
+
+                                <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-600 ring-1 ring-slate-200">
+                                  {getMatchStatusHint(match.status)}
+                                </div>
+
+                                {match.comment ? (
+                                  <div className="mt-4 text-sm text-slate-500">
+                                    Комментарий: {match.comment}
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                  <div>
+                                    <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                      Надежность
+                                    </div>
+                                    <div className="mt-2 text-sm font-semibold text-slate-900">
+                                      {reliabilityMeta.label}
+                                    </div>
+                                  </div>
+
+                                  <span
+                                    className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${reliabilityMeta.badgeClassName}`}
+                                  >
+                                    score: {reliability?.score ?? "—"}
+                                  </span>
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                                  <div className="rounded-2xl bg-slate-50 px-3 py-3 text-slate-700">
+                                    <div className="text-slate-500">Отработано</div>
+                                    <div className="mt-1 text-base font-semibold text-slate-900">
+                                      {reliability?.worked_count ?? 0}
+                                    </div>
+                                  </div>
+
+                                  <div className="rounded-2xl bg-slate-50 px-3 py-3 text-slate-700">
+                                    <div className="text-slate-500">Не вышел</div>
+                                    <div className="mt-1 text-base font-semibold text-slate-900">
+                                      {reliability?.no_show_count ?? 0}
+                                    </div>
+                                  </div>
+
+                                  <div className="rounded-2xl bg-slate-50 px-3 py-3 text-slate-700">
+                                    <div className="text-slate-500">Отменил</div>
+                                    <div className="mt-1 text-base font-semibold text-slate-900">
+                                      {reliability?.cancelled_count ?? 0}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 text-xs leading-5 text-slate-500">
+                                  {reliabilityMeta.helperText}
+                                </div>
+                              </div>
                             </div>
 
                             <div className="space-y-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type AppDocumentKey =
@@ -31,6 +32,7 @@ type AppSettings = {
 
 type QueryState = {
   initialDocKey: AppDocumentKey | null;
+  from: string | null;
 };
 
 const DOCUMENT_LABELS: Record<AppDocumentKey, string> = {
@@ -76,29 +78,35 @@ function normalizePhoneLink(value?: string | null) {
 
 function getInitialQueryState(): QueryState {
   if (typeof window === "undefined") {
-    return { initialDocKey: null };
+    return { initialDocKey: null, from: null };
   }
 
   const params = new URLSearchParams(window.location.search);
   const doc = params.get("doc");
+  const from = params.get("from");
 
-  if (
+  const initialDocKey =
     doc === "privacy_policy" ||
     doc === "terms_of_use" ||
     doc === "pd_agreement" ||
     doc === "about_service"
-  ) {
-    return { initialDocKey: doc };
-  }
+      ? doc
+      : null;
 
-  return { initialDocKey: null };
+  return {
+    initialDocKey,
+    from: from?.trim() || null,
+  };
 }
 
 export default function AboutPage() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [errorText, setErrorText] = useState("");
   const [isTelegram, setIsTelegram] = useState(false);
+  const [backFallbackHref, setBackFallbackHref] = useState("/");
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [documents, setDocuments] = useState<AppDocumentListItem[]>([]);
@@ -106,8 +114,11 @@ export default function AboutPage() {
   const [selectedDocument, setSelectedDocument] = useState<AppDocumentDetail | null>(null);
 
   useEffect(() => {
-    const { initialDocKey } = getInitialQueryState();
-    setIsTelegram(detectTelegramWebApp());
+    const { initialDocKey, from } = getInitialQueryState();
+    const detectedTelegram = detectTelegramWebApp();
+
+    setIsTelegram(detectedTelegram);
+    setBackFallbackHref(from || (detectedTelegram ? "/telegram" : "/"));
 
     async function loadInitialData() {
       try {
@@ -224,6 +235,29 @@ export default function AboutPage() {
     return [...ordered, ...extra];
   }, [documents]);
 
+  function handleBackClick(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+
+    const canGoBack =
+      typeof window !== "undefined" &&
+      window.history.length > 1 &&
+      document.referrer !== "";
+
+    if (canGoBack) {
+      router.back();
+
+      window.setTimeout(() => {
+        if (typeof window !== "undefined" && window.location.pathname === "/about") {
+          router.push(backFallbackHref);
+        }
+      }, 250);
+
+      return;
+    }
+
+    router.push(backFallbackHref);
+  }
+
   if (loading) {
     return (
       <main className="px-4 py-6">
@@ -237,7 +271,11 @@ export default function AboutPage() {
   return (
     <main className={`px-4 ${isTelegram ? "space-y-5 py-5" : "space-y-6 py-6"}`}>
       <div>
-        <Link href="/telegram" className="text-sm text-slate-600 underline">
+        <Link
+          href={backFallbackHref}
+          onClick={handleBackClick}
+          className="text-sm text-slate-600 underline"
+        >
           ← Назад
         </Link>
       </div>

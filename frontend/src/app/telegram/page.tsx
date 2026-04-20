@@ -103,6 +103,14 @@ function currentRoleLabel(role: RoleChoice | null) {
   return "Не выбрана";
 }
 
+function roleDescription(role: RoleChoice) {
+  if (role === "candidate") {
+    return "Вакансии, отклики, профиль и доступность.";
+  }
+
+  return "Кабинет работодателя, вакансии и кандидаты.";
+}
+
 export default function TelegramEntryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -459,6 +467,7 @@ export default function TelegramEntryPage() {
 
   const hasCandidate = Boolean(telegramUser.candidate_id);
   const hasEmployer = Boolean(telegramUser.employer_id);
+  const canContinue = consentAccepted || consentChecked;
 
   return (
     <main className="space-y-6 px-4 py-6">
@@ -471,8 +480,8 @@ export default function TelegramEntryPage() {
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            Выберите, в каком режиме открыть приложение сейчас. Роль можно будет
-            сменить позже на этом же экране.
+            Здесь вы можете войти как кандидат или работодатель. Если у вас есть
+            обе роли, их можно переключать с этого экрана.
           </p>
 
           <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
@@ -481,7 +490,7 @@ export default function TelegramEntryPage() {
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-4">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Ваши профили
+              Текущее состояние
             </div>
 
             <div className="mt-2 text-sm text-slate-700">
@@ -489,9 +498,16 @@ export default function TelegramEntryPage() {
               <span className="font-semibold">{currentRoleLabel(savedRole)}</span>
             </div>
 
-            <div className="mt-2 text-sm text-slate-600">
-              Кандидат: {hasCandidate ? "есть" : "нет"} · Работодатель:{" "}
-              {hasEmployer ? "есть" : "нет"}
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <div className="font-medium text-slate-900">Кандидат</div>
+                <div className="mt-1">{hasCandidate ? "Профиль уже создан" : "Профиля пока нет"}</div>
+              </div>
+
+              <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <div className="font-medium text-slate-900">Работодатель</div>
+                <div className="mt-1">{hasEmployer ? "Профиль уже создан" : "Профиля пока нет"}</div>
+              </div>
             </div>
 
             {savedRole ? (
@@ -514,7 +530,11 @@ export default function TelegramEntryPage() {
 
           {!consentAccepted ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4">
-              <label className="flex items-start gap-3">
+              <div className="text-sm font-semibold text-slate-900">
+                Подтвердите согласие перед продолжением
+              </div>
+
+              <label className="mt-3 flex items-start gap-3">
                 <input
                   type="checkbox"
                   checked={consentChecked}
@@ -527,26 +547,70 @@ export default function TelegramEntryPage() {
                   className="mt-1 h-4 w-4 rounded border-slate-300"
                 />
                 <span className="text-sm leading-6 text-slate-600">
-                  Продолжая, я принимаю{" "}
-                  <Link href="/about?doc=terms_of_use" className="underline underline-offset-4">
+                  Нажимая кнопку продолжения, я принимаю{" "}
+                  <Link
+                    href="/about?from=/telegram&doc=terms_of_use"
+                    className="underline underline-offset-4"
+                  >
                     Пользовательское соглашение
                   </Link>
                   ,{" "}
                   <Link
-                    href="/about?doc=privacy_policy"
+                    href="/about?from=/telegram&doc=privacy_policy"
                     className="underline underline-offset-4"
                   >
                     Политику конфиденциальности
                   </Link>{" "}
                   и даю{" "}
-                  <Link href="/about?doc=pd_agreement" className="underline underline-offset-4">
+                  <Link
+                    href="/about?from=/telegram&doc=pd_agreement"
+                    className="underline underline-offset-4"
+                  >
                     согласие на обработку персональных данных
                   </Link>
                   .
                 </span>
               </label>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link
+                  href="/about?from=/telegram&doc=about_service"
+                  className={compactLinkButtonClass()}
+                >
+                  О приложении
+                </Link>
+                <Link
+                  href="/about?from=/telegram"
+                  className={compactLinkButtonClass()}
+                >
+                  Все документы
+                </Link>
+              </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-sm font-semibold text-emerald-900">
+                Согласие уже подтверждено
+              </div>
+              <div className="mt-1 text-sm text-emerald-800">
+                Документы можно открыть в любой момент.
+              </div>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Link
+                  href="/about?from=/telegram&doc=about_service"
+                  className={compactLinkButtonClass()}
+                >
+                  О приложении
+                </Link>
+                <Link
+                  href="/about?from=/telegram"
+                  className={compactLinkButtonClass()}
+                >
+                  Все документы
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -557,73 +621,123 @@ export default function TelegramEntryPage() {
       ) : null}
 
       {!createRole ? (
-        <section className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-lg font-semibold text-slate-900">Кандидат</div>
-            <div className="mt-2 text-sm leading-6 text-slate-600">
-              Смотреть вакансии, откликаться и следить за статусами.
-            </div>
+        <>
+          {(hasCandidate || hasEmployer) && (
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Войти в существующий профиль</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Выберите роль, в которой хотите открыть приложение сейчас.
+                </p>
+              </div>
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              {hasCandidate ? (
-                <button
-                  type="button"
-                  onClick={() => saveRole("candidate")}
-                  className={primaryRoleButtonClass(!consentAccepted && !consentChecked)}
-                >
-                  Войти как кандидат
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!ensureConsentBeforeContinue()) {
-                      return;
-                    }
-                    setErrorText("");
-                    setCreateRole("candidate");
-                  }}
-                  className={secondaryButtonClass()}
-                >
-                  Создать роль кандидата
-                </button>
-              )}
-            </div>
-          </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {hasCandidate ? (
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-lg font-semibold text-slate-900">Кандидат</div>
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      {roleDescription("candidate")}
+                    </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-lg font-semibold text-slate-900">Работодатель</div>
-            <div className="mt-2 text-sm leading-6 text-slate-600">
-              Смотреть кандидатов, работать со статусами и вакансиями.
-            </div>
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => saveRole("candidate")}
+                        disabled={!canContinue}
+                        className={primaryRoleButtonClass(!canContinue)}
+                      >
+                        Войти как кандидат
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
-            <div className="mt-4 flex flex-wrap gap-3">
-              {hasEmployer ? (
-                <button
-                  type="button"
-                  onClick={() => saveRole("employer")}
-                  className={primaryRoleButtonClass(!consentAccepted && !consentChecked)}
-                >
-                  Войти как работодатель
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!ensureConsentBeforeContinue()) {
-                      return;
-                    }
-                    setErrorText("");
-                    setCreateRole("employer");
-                  }}
-                  className={secondaryButtonClass()}
-                >
-                  Создать роль работодателя
-                </button>
-              )}
-            </div>
-          </div>
-        </section>
+                {hasEmployer ? (
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="text-lg font-semibold text-slate-900">Работодатель</div>
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      {roleDescription("employer")}
+                    </div>
+
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => saveRole("employer")}
+                        disabled={!canContinue}
+                        className={primaryRoleButtonClass(!canContinue)}
+                      >
+                        Войти как работодатель
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          )}
+
+          {(!hasCandidate || !hasEmployer) && (
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Добавить роль</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Можно пользоваться приложением сразу в двух ролях.
+                </p>
+              </div>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                {!hasCandidate ? (
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-lg font-semibold text-slate-900">Кандидат</div>
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      Смотреть вакансии, откликаться и следить за статусами.
+                    </div>
+
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!ensureConsentBeforeContinue()) {
+                            return;
+                          }
+                          setErrorText("");
+                          setCreateRole("candidate");
+                        }}
+                        className={secondaryButtonClass()}
+                      >
+                        Создать роль кандидата
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!hasEmployer ? (
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-lg font-semibold text-slate-900">Работодатель</div>
+                    <div className="mt-2 text-sm leading-6 text-slate-600">
+                      Смотреть кандидатов, работать со статусами и вакансиями.
+                    </div>
+
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!ensureConsentBeforeContinue()) {
+                            return;
+                          }
+                          setErrorText("");
+                          setCreateRole("employer");
+                        }}
+                        className={secondaryButtonClass()}
+                      >
+                        Создать роль работодателя
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          )}
+        </>
       ) : null}
 
       {createRole === "candidate" ? (
