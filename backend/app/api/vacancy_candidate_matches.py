@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.funnel_event import FunnelEvent
+from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.schemas.vacancy_candidate_match import (
     VacancyCandidateMatchCreate,
@@ -14,20 +15,46 @@ from app.schemas.vacancy_candidate_match import (
 router = APIRouter(prefix="/matches", tags=["Matches"])
 
 
-def can_transition_to(current_status: str, new_status: str) -> bool:
-    allowed_transitions = {
+def is_shift_match(db: Session, match: VacancyCandidateMatch) -> bool:
+    vacancy = db.query(Vacancy).filter(Vacancy.id == match.vacancy_id).first()
+    if not vacancy:
+        return False
+    return vacancy.listing_type == "shift"
+
+
+def can_transition_to(current_status: str, new_status: str, is_shift: bool = False) -> bool:
+    default_transitions = {
         "shortlist": {"sent", "viewed", "invited", "rejected"},
         "sent": {"viewed", "invited", "rejected"},
         "viewed": {"invited", "rejected"},
         "invited": {"interviewed", "rejected", "no_show"},
-        "interviewed": {"hired", "rejected", "no_show"},
+        "interviewed": {"offered", "hired", "rejected", "no_show"},
         "offered": {"hired", "rejected"},
         "hired": set(),
         "rejected": set(),
         "no_show": set(),
+        "confirmed": set(),
+        "worked": set(),
+        "cancelled": set(),
     }
 
-    return new_status in allowed_transitions.get(current_status, set())
+    shift_transitions = {
+        "shortlist": {"sent", "viewed", "invited", "rejected"},
+        "sent": {"viewed", "invited", "rejected"},
+        "viewed": {"invited", "rejected"},
+        "invited": {"confirmed", "cancelled", "rejected", "no_show"},
+        "confirmed": {"worked", "cancelled", "no_show"},
+        "worked": set(),
+        "cancelled": set(),
+        "rejected": set(),
+        "no_show": set(),
+        "interviewed": {"offered", "hired", "rejected", "no_show"},
+        "offered": {"hired", "rejected"},
+        "hired": set(),
+    }
+
+    transitions = shift_transitions if is_shift else default_transitions
+    return new_status in transitions.get(current_status, set())
 
 
 def create_status_event(
@@ -43,6 +70,34 @@ def create_status_event(
         event_type="match_status_changed",
         event_source="api",
         comment=f"match_id={match.id}; {old_status} -> {new_status}",
+    )
+    db.add(event)
+
+
+def create_shift_event_if_needed(
+    db: Session,
+    match: VacancyCandidateMatch,
+    new_status: str,
+) -> None:
+    mapping = {
+        "invited": "shift_invited",
+        "confirmed": "shift_confirmed",
+        "worked": "shift_worked",
+        "no_show": "shift_no_show",
+        "cancelled": "shift_cancelled",
+    }
+
+    event_type = mapping.get(new_status)
+    if not event_type:
+        return
+
+    event = FunnelEvent(
+        candidate_id=match.candidate_id,
+        employer_id=match.employer_id,
+        vacancy_id=match.vacancy_id,
+        event_type=event_type,
+        event_source="api",
+        comment=f"match_id={match.id}; status={new_status}",
     )
     db.add(event)
 
@@ -70,8 +125,11 @@ def create_match(payload: VacancyCandidateMatchCreate, db: Session = Depends(get
         comment=f"match_id={match.id}; score={match.match_score or 0}",
     )
     db.add(event)
-    db.commit()
 
+    if is_shift_match(db, match):
+        create_shift_event_if_needed(db, match, match.status)
+
+    db.commit()
     return match
 
 
@@ -108,9 +166,10 @@ def update_match(
         raise HTTPException(status_code=404, detail="Match not found")
 
     old_status = match.status
+    shift_match = is_shift_match(db, match)
 
     if payload.status is not None:
-        if not can_transition_to(match.status, payload.status):
+        if not can_transition_to(match.status, payload.status, is_shift=shift_match):
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid transition: {match.status} -> {payload.status}",
@@ -128,6 +187,8 @@ def update_match(
 
     if payload.status is not None and old_status != match.status:
         create_status_event(db, match, old_status, match.status)
+        if shift_match:
+            create_shift_event_if_needed(db, match, match.status)
         db.commit()
 
     return match
@@ -143,8 +204,9 @@ def apply_status_transition(
         raise HTTPException(status_code=404, detail="Match not found")
 
     old_status = match.status
+    shift_match = is_shift_match(db, match)
 
-    if not can_transition_to(old_status, new_status):
+    if not can_transition_to(old_status, new_status, is_shift=shift_match):
         raise HTTPException(
             status_code=400,
             detail=f"Invalid transition: {old_status} -> {new_status}",
@@ -155,6 +217,8 @@ def apply_status_transition(
     db.refresh(match)
 
     create_status_event(db, match, old_status, new_status)
+    if shift_match:
+        create_shift_event_if_needed(db, match, new_status)
     db.commit()
 
     return match
@@ -173,6 +237,21 @@ def view_match(match_id: int, db: Session = Depends(get_db)):
 @router.post("/{match_id}/invite", response_model=VacancyCandidateMatchRead)
 def invite_match(match_id: int, db: Session = Depends(get_db)):
     return apply_status_transition(match_id, "invited", db)
+
+
+@router.post("/{match_id}/confirm", response_model=VacancyCandidateMatchRead)
+def confirm_match(match_id: int, db: Session = Depends(get_db)):
+    return apply_status_transition(match_id, "confirmed", db)
+
+
+@router.post("/{match_id}/worked", response_model=VacancyCandidateMatchRead)
+def worked_match(match_id: int, db: Session = Depends(get_db)):
+    return apply_status_transition(match_id, "worked", db)
+
+
+@router.post("/{match_id}/cancel", response_model=VacancyCandidateMatchRead)
+def cancel_match(match_id: int, db: Session = Depends(get_db)):
+    return apply_status_transition(match_id, "cancelled", db)
 
 
 @router.post("/{match_id}/interview", response_model=VacancyCandidateMatchRead)
@@ -203,7 +282,7 @@ def reopen_match(match_id: int, db: Session = Depends(get_db)):
 
     old_status = match.status
 
-    if old_status not in {"rejected", "no_show", "hired"}:
+    if old_status not in {"rejected", "no_show", "hired", "worked", "cancelled"}:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid transition: {old_status} -> shortlist",
