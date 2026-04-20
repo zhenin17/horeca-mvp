@@ -10,6 +10,7 @@ from app.models.candidate import Candidate
 from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
 from app.models.vacancy import Vacancy
+from app.models.funnel_event import FunnelEvent
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.schemas.candidate import (
     CandidateAvailabilityCreate,
@@ -413,13 +414,13 @@ def get_candidate_reliability(candidate_id: int, db: Session = Depends(get_db)):
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    matches = (
-        db.query(VacancyCandidateMatch)
-        .filter(VacancyCandidateMatch.candidate_id == candidate_id)
+    events = (
+        db.query(FunnelEvent)
+        .filter(FunnelEvent.candidate_id == candidate_id)
         .all()
     )
 
-    summary = calculate_candidate_reliability(matches)
+    summary = calculate_candidate_reliability(events)
 
     return {
         "candidate_id": candidate.id,
