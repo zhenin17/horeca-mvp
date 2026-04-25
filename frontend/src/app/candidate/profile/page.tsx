@@ -554,27 +554,27 @@ export default function CandidateProfilePage() {
     if (!candidate) {
       return;
     }
-
+  
     try {
       setDeletingAvailabilityId(availabilityId);
       setAvailabilityErrorText("");
       setMessage("");
-
+  
+      const headers: HeadersInit = {};
+      const token =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("hubsty_access_token")
+          : null;
+  
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+  
       const response = await fetch(
         `/api/candidates/${candidate.id}/availability/${availabilityId}`,
         {
           method: "DELETE",
-          headers: (() => {
-            const token = typeof window !== "undefined"
-              ? window.localStorage.getItem("hubsty_access_token")
-              : null;
-
-            return token
-              ? {
-                  Authorization: `Bearer ${token}`,
-                }
-              : {};
-          })(),
+          headers,
         }
       );
 
