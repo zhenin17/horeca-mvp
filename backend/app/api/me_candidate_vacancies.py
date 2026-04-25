@@ -7,7 +7,7 @@ from app.models.candidate import Candidate
 from app.models.vacancy import Vacancy
 from app.schemas.vacancy import VacancyPhotoRead
 from app.services.auth import CurrentUserContext
-from app.services.scoring import calculate_candidate_vacancy_score
+from app.services.scoring import calculate_final_match_score
 
 router = APIRouter(prefix="/me/candidate", tags=["Me Candidate Vacancies"])
 
@@ -40,7 +40,7 @@ def list_my_candidate_vacancies(
     suggested_vacancies = []
 
     for vacancy in vacancies:
-        score = calculate_candidate_vacancy_score(candidate, vacancy)
+        score = calculate_final_match_score(candidate, vacancy)
 
         suggested_vacancies.append(
             {
