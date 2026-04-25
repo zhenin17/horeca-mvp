@@ -162,20 +162,22 @@ function getStatusHint(match?: MatchItem | null) {
 function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
   let score = 40;
 
-  const candidateRole = candidate.primary_role.trim().toLowerCase();
-  const vacancyRole = vacancy.role.trim().toLowerCase();
+  const candidateRole = (candidate.primary_role || "").trim().toLowerCase();
+  const vacancyRole = (vacancy.role || "").trim().toLowerCase();
 
-  if (candidateRole === vacancyRole) {
+  if (candidateRole && vacancyRole && candidateRole === vacancyRole) {
     score += 25;
   } else if (
-    candidateRole.includes(vacancyRole) ||
-    vacancyRole.includes(candidateRole)
+    candidateRole &&
+    vacancyRole &&
+    (candidateRole.includes(vacancyRole) ||
+      vacancyRole.includes(candidateRole))
   ) {
     score += 15;
   }
 
   if (
-    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+    candidate.city?.trim().toLowerCase() === vacancy.city?.trim().toLowerCase()
   ) {
     score += 10;
   }
@@ -281,23 +283,25 @@ function buildFitExplanation(
   candidate: CandidateItem,
   vacancy: VacancyItem
 ): FitExplanation {
-  const candidateRole = candidate.primary_role.trim().toLowerCase();
-  const vacancyRole = vacancy.role.trim().toLowerCase();
+  const candidateRole = (candidate.primary_role || "").trim().toLowerCase();
+  const vacancyRole = (vacancy.role || "").trim().toLowerCase();
 
   const reasons: string[] = [];
   let title = "Подходит по базовым параметрам";
 
-  if (candidateRole === vacancyRole) {
+  if (candidateRole && vacancyRole && candidateRole === vacancyRole) {
     title = "Роль полностью совпадает";
   } else if (
-    candidateRole.includes(vacancyRole) ||
-    vacancyRole.includes(candidateRole)
+    candidateRole &&
+    vacancyRole &&
+    (candidateRole.includes(vacancyRole) ||
+      vacancyRole.includes(candidateRole))
   ) {
     title = "Роль близка вашему профилю";
   }
 
   if (
-    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+    candidate.city?.trim().toLowerCase() === vacancy.city?.trim().toLowerCase()
   ) {
     reasons.push("Ваш город");
   }
@@ -350,7 +354,7 @@ function getVacancyStatusTone(match?: MatchItem | null) {
 }
 
 function getRoleEmoji(role: string) {
-  const value = role.trim().toLowerCase();
+  const value = (role || "").trim().toLowerCase();
 
   if (value.includes("бар")) {
     return "☕";
@@ -375,7 +379,7 @@ function getRoleEmoji(role: string) {
 }
 
 function getRoleGradient(role: string) {
-  const value = role.trim().toLowerCase();
+  const value = (role || "").trim().toLowerCase();
 
   if (value.includes("бар")) {
     return "from-amber-100 via-orange-50 to-white";
@@ -462,18 +466,6 @@ function getPrimaryActionText(vacancy: VacancyCardItem) {
   return "Открыть вакансию";
 }
 
-function getVacancyCoverPhoto(vacancy: VacancyItem) {
-  if (!vacancy.photos || vacancy.photos.length === 0) {
-    return null;
-  }
-
-  return (
-    vacancy.photos.find((photo) => photo.is_cover) ||
-    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
-    null
-  );
-}
-
 function normalizeArrayResponse<T>(
   value: unknown,
   keys: string[] = []
@@ -483,15 +475,172 @@ function normalizeArrayResponse<T>(
   }
 
   if (value && typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+
     for (const key of keys) {
-      const nested = (value as Record<string, unknown>)[key];
+      const nested = objectValue[key];
       if (Array.isArray(nested)) {
         return nested as T[];
       }
     }
+
+    if (Array.isArray(objectValue.items)) {
+      return objectValue.items as T[];
+    }
+
+    if (Array.isArray(objectValue.vacancies)) {
+      return objectValue.vacancies as T[];
+    }
+
+    if (Array.isArray(objectValue.matches)) {
+      return objectValue.matches as T[];
+    }
+
+    if (Array.isArray(objectValue.results)) {
+      return objectValue.results as T[];
+    }
+
+    if (Array.isArray(objectValue.data)) {
+      return objectValue.data as T[];
+    }
   }
 
   return [];
+}
+
+function normalizeVacancyItem(raw: unknown): VacancyItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  const source =
+    objectValue.vacancy && typeof objectValue.vacancy === "object"
+      ? (objectValue.vacancy as Record<string, unknown>)
+      : objectValue;
+
+  const id = Number(source.id);
+  const employerId = Number(source.employer_id);
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+
+  const listingType =
+    source.listing_type === "part_time" || source.listing_type === "shift"
+      ? source.listing_type
+      : "job";
+
+  const slotsCount =
+    source.slots_count === null || source.slots_count === undefined
+      ? null
+      : Number(source.slots_count);
+
+  return {
+    id,
+    employer_id: Number.isFinite(employerId) ? employerId : 0,
+    role: String(source.role ?? ""),
+    venue_name: String(source.venue_name ?? ""),
+    city: String(source.city ?? ""),
+    district:
+      source.district === null || source.district === undefined
+        ? null
+        : String(source.district),
+    salary_text:
+      source.salary_text === null || source.salary_text === undefined
+        ? null
+        : String(source.salary_text),
+    schedule_text:
+      source.schedule_text === null || source.schedule_text === undefined
+        ? null
+        : String(source.schedule_text),
+    needed_start:
+      source.needed_start === null || source.needed_start === undefined
+        ? null
+        : String(source.needed_start),
+    listing_type: listingType,
+    shift_date:
+      source.shift_date === null || source.shift_date === undefined
+        ? null
+        : String(source.shift_date),
+    shift_start_time:
+      source.shift_start_time === null || source.shift_start_time === undefined
+        ? null
+        : String(source.shift_start_time),
+    shift_end_time:
+      source.shift_end_time === null || source.shift_end_time === undefined
+        ? null
+        : String(source.shift_end_time),
+    urgent_flag: Boolean(source.urgent_flag),
+    slots_count: Number.isFinite(slotsCount) ? slotsCount : null,
+    status: String(source.status ?? "active"),
+    photos: normalizeArrayResponse<VacancyPhoto>(source.photos, [
+      "items",
+      "photos",
+      "results",
+      "data",
+    ]),
+  };
+}
+
+function normalizeMatchItem(raw: unknown): MatchItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  const id = Number(objectValue.id);
+  const candidateId = Number(objectValue.candidate_id);
+  const employerId = Number(objectValue.employer_id);
+  const nestedVacancy =
+    objectValue.vacancy && typeof objectValue.vacancy === "object"
+      ? (objectValue.vacancy as Record<string, unknown>)
+      : null;
+
+  const vacancyId = Number(objectValue.vacancy_id ?? nestedVacancy?.id);
+
+  if (!Number.isFinite(id) || !Number.isFinite(vacancyId)) {
+    return null;
+  }
+
+  const matchScore =
+    objectValue.match_score === null || objectValue.match_score === undefined
+      ? null
+      : Number(objectValue.match_score);
+
+  return {
+    id,
+    candidate_id: Number.isFinite(candidateId) ? candidateId : 0,
+    employer_id: Number.isFinite(employerId) ? employerId : 0,
+    vacancy_id: vacancyId,
+    match_score: Number.isFinite(matchScore) ? matchScore : null,
+    status: String(objectValue.status ?? ""),
+    comment:
+      objectValue.comment === null || objectValue.comment === undefined
+        ? null
+        : String(objectValue.comment),
+  };
+}
+
+function getVacancyCoverPhoto(vacancy: VacancyItem) {
+  const photos = normalizeArrayResponse<VacancyPhoto>(vacancy.photos, [
+    "items",
+    "photos",
+    "results",
+    "data",
+  ]);
+
+  if (photos.length === 0) {
+    return null;
+  }
+
+  return (
+    photos.find((photo) => photo.is_cover) ||
+    [...photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    null
+  );
 }
 
 function VacancyPhotoBlock({
@@ -516,7 +665,7 @@ function VacancyPhotoBlock({
             Фото вакансии пока не добавлено
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            {vacancy.venue_name}
+            {vacancy.venue_name || "Заведение не указано"}
           </div>
         </div>
       </div>
@@ -527,7 +676,9 @@ function VacancyPhotoBlock({
     <div className="relative h-48 w-full overflow-hidden bg-slate-100">
       <img
         src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
-        alt={`${vacancy.venue_name} — ${vacancy.role}`}
+        alt={`${vacancy.venue_name || "Вакансия"} — ${
+          vacancy.role || "Без названия"
+        }`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}
       />
@@ -564,19 +715,23 @@ export default function CandidateVacanciesPage() {
         apiFetch<unknown>("/me/candidate/matches"),
       ]);
 
-      const vacanciesData = normalizeArrayResponse<VacancyItem>(vacanciesRaw, [
+      const vacanciesData = normalizeArrayResponse<unknown>(vacanciesRaw, [
         "items",
         "vacancies",
         "results",
         "data",
-      ]);
+      ])
+        .map(normalizeVacancyItem)
+        .filter(Boolean) as VacancyItem[];
 
-      const matchesData = normalizeArrayResponse<MatchItem>(matchesRaw, [
+      const matchesData = normalizeArrayResponse<unknown>(matchesRaw, [
         "items",
         "matches",
         "results",
         "data",
-      ]);
+      ])
+        .map(normalizeMatchItem)
+        .filter(Boolean) as MatchItem[];
 
       const matchByVacancyId = new Map<number, MatchItem>();
       for (const match of matchesData) {
@@ -716,7 +871,7 @@ export default function CandidateVacanciesPage() {
 
               {candidate ? (
                 <div className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
-                  {candidate.primary_role}
+                  {candidate.primary_role || "Роль не указана"}
                 </div>
               ) : null}
             </div>
@@ -897,11 +1052,11 @@ export default function CandidateVacanciesPage() {
                           </div>
 
                           <div className="text-xl font-semibold text-slate-900">
-                            {vacancy.role}
+                            {vacancy.role || "Без названия"}
                           </div>
 
                           <div className="text-sm text-slate-700">
-                            {vacancy.venue_name}
+                            {vacancy.venue_name || "Заведение не указано"}
                           </div>
 
                           {vacancy.listing_type === "shift" &&
