@@ -30,6 +30,13 @@ type AppSettings = {
   app_version?: string | null;
 };
 
+type AppSettingItem = {
+  key?: string | null;
+  value?: string | null;
+};
+
+type AppSettingsResponse = AppSettings | AppSettingItem[] | { items?: AppSettingItem[] };
+
 type QueryState = {
   initialDocKey: AppDocumentKey | null;
   from: string | null;
@@ -76,6 +83,49 @@ function normalizePhoneLink(value?: string | null) {
   return cleaned ? `tel:${cleaned}` : null;
 }
 
+function normalizeSettings(raw: unknown): AppSettings {
+  if (!raw) {
+    return {};
+  }
+
+  // Формат: [{ key: string, value: string }]
+  if (Array.isArray(raw)) {
+    return raw.reduce<AppSettings>((acc, item) => {
+      if (!item || typeof item !== "object") {
+        return acc;
+      }
+
+      const settingItem = item as AppSettingItem;
+      const key = settingItem.key?.trim();
+
+      if (!key) {
+        return acc;
+      }
+
+      acc[key as keyof AppSettings] = settingItem.value ?? "";
+
+      return acc;
+    }, {});
+  }
+
+  // Формат: { items: [{ key: string, value: string }] }
+  if (
+    typeof raw === "object" &&
+    raw !== null &&
+    "items" in raw &&
+    Array.isArray((raw as { items?: unknown }).items)
+  ) {
+    return normalizeSettings((raw as { items: unknown[] }).items);
+  }
+
+  // Формат: прямой объект settings
+  if (typeof raw === "object" && raw !== null) {
+    return raw as AppSettings;
+  }
+
+  return {};
+}
+
 function getInitialQueryState(): QueryState {
   if (typeof window === "undefined") {
     return { initialDocKey: null, from: null };
@@ -108,7 +158,7 @@ export default function AboutPage() {
   const [isTelegram, setIsTelegram] = useState(false);
   const [backFallbackHref, setBackFallbackHref] = useState("/");
 
-  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [settings, setSettings] = useState<AppSettings>({});
   const [documents, setDocuments] = useState<AppDocumentListItem[]>([]);
   const [selectedDocKey, setSelectedDocKey] = useState<AppDocumentKey | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<AppDocumentDetail | null>(null);
@@ -139,10 +189,10 @@ export default function AboutPage() {
         }
 
         const documentsData = (await documentsResponse.json()) as AppDocumentListItem[];
-        const settingsData = (await settingsResponse.json()) as AppSettings;
+        const settingsData = (await settingsResponse.json()) as AppSettingsResponse;
 
         setDocuments(documentsData || []);
-        setSettings(settingsData || {});
+        setSettings(normalizeSettings(settingsData));
 
         const fallbackKey =
           initialDocKey ||
@@ -203,14 +253,24 @@ export default function AboutPage() {
     void loadSelectedDocument();
   }, [selectedDocKey]);
 
+  const supportEmail = settings.support_email?.trim() || "";
+  const supportTelegram = settings.support_telegram?.trim() || "";
+  const supportPhone = settings.support_phone?.trim() || "";
+  const aboutTextShort = settings.about_text_short?.trim() || "";
+  const aboutTextFull = settings.about_text_full?.trim() || "";
+  const appVersion = settings.app_version?.trim() || "";
+
+  const hasSupportContacts =
+    Boolean(supportEmail) || Boolean(supportTelegram) || Boolean(supportPhone);
+
   const telegramLink = useMemo(
-    () => normalizeTelegramLink(settings?.support_telegram),
-    [settings?.support_telegram]
+    () => normalizeTelegramLink(supportTelegram),
+    [supportTelegram]
   );
 
   const phoneLink = useMemo(
-    () => normalizePhoneLink(settings?.support_phone),
-    [settings?.support_phone]
+    () => normalizePhoneLink(supportPhone),
+    [supportPhone]
   );
 
   const orderedDocuments = useMemo(() => {
@@ -303,24 +363,23 @@ export default function AboutPage() {
           </h1>
 
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-            {settings?.about_text_short?.trim()
-              ? settings.about_text_short
-              : "Здесь собраны основные документы, контакты поддержки и информация о сервисе."}
+            {aboutTextShort ||
+              "Здесь собраны основные документы, контакты поддержки и информация о сервисе."}
           </p>
 
-          {settings?.app_version ? (
+          {appVersion ? (
             <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
-              Версия: {settings.app_version}
+              Версия: {appVersion}
             </div>
           ) : null}
         </div>
       </section>
 
-      {settings?.about_text_full?.trim() ? (
+      {aboutTextFull ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-semibold text-slate-900">Что такое Hubsty</h2>
           <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-            {settings.about_text_full}
+            {aboutTextFull}
           </div>
         </section>
       ) : null}
@@ -365,19 +424,19 @@ export default function AboutPage() {
             <h2 className="text-xl font-semibold text-slate-900">Поддержка</h2>
 
             <div className="mt-4 space-y-3 text-sm text-slate-600">
-              {settings?.support_email ? (
+              {supportEmail ? (
                 <div>
                   <div className="text-xs text-slate-500">Email</div>
                   <a
-                    href={`mailto:${settings.support_email}`}
+                    href={`mailto:${supportEmail}`}
                     className="mt-1 inline-block text-slate-900 underline"
                   >
-                    {settings.support_email}
+                    {supportEmail}
                   </a>
                 </div>
               ) : null}
 
-              {settings?.support_telegram ? (
+              {supportTelegram ? (
                 <div>
                   <div className="text-xs text-slate-500">Telegram</div>
                   {telegramLink ? (
@@ -387,32 +446,33 @@ export default function AboutPage() {
                       rel="noreferrer"
                       className="mt-1 inline-block text-slate-900 underline"
                     >
-                      @{settings.support_telegram.replace(/^@/, "")}
+                      @{supportTelegram.replace(/^@/, "")}
                     </a>
                   ) : (
                     <div className="mt-1 text-slate-900">
-                      {settings.support_telegram}
+                      {supportTelegram}
                     </div>
                   )}
                 </div>
               ) : null}
 
-              {settings?.support_phone ? (
+              {supportPhone ? (
                 <div>
                   <div className="text-xs text-slate-500">Телефон</div>
                   {phoneLink ? (
-                    <a href={phoneLink} className="mt-1 inline-block text-slate-900 underline">
-                      {settings.support_phone}
+                    <a
+                      href={phoneLink}
+                      className="mt-1 inline-block text-slate-900 underline"
+                    >
+                      {supportPhone}
                     </a>
                   ) : (
-                    <div className="mt-1 text-slate-900">{settings.support_phone}</div>
+                    <div className="mt-1 text-slate-900">{supportPhone}</div>
                   )}
                 </div>
               ) : null}
 
-              {!settings?.support_email &&
-              !settings?.support_telegram &&
-              !settings?.support_phone ? (
+              {!hasSupportContacts ? (
                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
                   Контакты поддержки пока не заполнены.
                 </div>
