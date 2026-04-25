@@ -177,20 +177,22 @@ function fitScoreLabel(score: number) {
 function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
   let score = 40;
 
-  const candidateRole = candidate.primary_role.trim().toLowerCase();
-  const vacancyRole = vacancy.role.trim().toLowerCase();
+  const candidateRole = (candidate.primary_role || "").trim().toLowerCase();
+  const vacancyRole = (vacancy.role || "").trim().toLowerCase();
 
-  if (candidateRole === vacancyRole) {
+  if (candidateRole && vacancyRole && candidateRole === vacancyRole) {
     score += 25;
   } else if (
-    candidateRole.includes(vacancyRole) ||
-    vacancyRole.includes(candidateRole)
+    candidateRole &&
+    vacancyRole &&
+    (candidateRole.includes(vacancyRole) ||
+      vacancyRole.includes(candidateRole))
   ) {
     score += 15;
   }
 
   if (
-    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+    candidate.city?.trim().toLowerCase() === vacancy.city?.trim().toLowerCase()
   ) {
     score += 10;
   }
@@ -220,26 +222,22 @@ function calculateFitScore(candidate: CandidateItem, vacancy: VacancyItem) {
 function buildFitReasons(candidate: CandidateItem, vacancy: VacancyItem) {
   const reasons: string[] = [];
 
-  if (
-    candidate.primary_role.trim().toLowerCase() ===
-    vacancy.role.trim().toLowerCase()
-  ) {
+  const candidateRole = (candidate.primary_role || "").trim().toLowerCase();
+  const vacancyRole = (vacancy.role || "").trim().toLowerCase();
+
+  if (candidateRole && vacancyRole && candidateRole === vacancyRole) {
     reasons.push("Роль полностью совпадает с вашим профилем");
   } else if (
-    candidate.primary_role
-      .trim()
-      .toLowerCase()
-      .includes(vacancy.role.trim().toLowerCase()) ||
-    vacancy.role
-      .trim()
-      .toLowerCase()
-      .includes(candidate.primary_role.trim().toLowerCase())
+    candidateRole &&
+    vacancyRole &&
+    (candidateRole.includes(vacancyRole) ||
+      vacancyRole.includes(candidateRole))
   ) {
     reasons.push("Роль близка к вашему текущему профилю");
   }
 
   if (
-    candidate.city.trim().toLowerCase() === vacancy.city.trim().toLowerCase()
+    candidate.city?.trim().toLowerCase() === vacancy.city?.trim().toLowerCase()
   ) {
     reasons.push("Вакансия находится в вашем городе");
   }
@@ -409,14 +407,179 @@ function getApplyButtonText(
   return "Откликнуться на вакансию";
 }
 
+function normalizeArrayResponse<T>(
+  value: unknown,
+  keys: string[] = []
+): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+
+    for (const key of keys) {
+      const nested = objectValue[key];
+      if (Array.isArray(nested)) {
+        return nested as T[];
+      }
+    }
+
+    if (Array.isArray(objectValue.items)) {
+      return objectValue.items as T[];
+    }
+
+    if (Array.isArray(objectValue.vacancies)) {
+      return objectValue.vacancies as T[];
+    }
+
+    if (Array.isArray(objectValue.matches)) {
+      return objectValue.matches as T[];
+    }
+
+    if (Array.isArray(objectValue.results)) {
+      return objectValue.results as T[];
+    }
+
+    if (Array.isArray(objectValue.data)) {
+      return objectValue.data as T[];
+    }
+  }
+
+  return [];
+}
+
+function normalizeVacancyItem(raw: unknown): VacancyItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  const source =
+    objectValue.vacancy && typeof objectValue.vacancy === "object"
+      ? (objectValue.vacancy as Record<string, unknown>)
+      : objectValue;
+
+  const id = Number(source.id);
+  const employerId = Number(source.employer_id);
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+
+  const listingType =
+    source.listing_type === "part_time" || source.listing_type === "shift"
+      ? source.listing_type
+      : "job";
+
+  const slotsCount =
+    source.slots_count === null || source.slots_count === undefined
+      ? null
+      : Number(source.slots_count);
+
+  return {
+    id,
+    employer_id: Number.isFinite(employerId) ? employerId : 0,
+    role: String(source.role ?? ""),
+    venue_name: String(source.venue_name ?? ""),
+    city: String(source.city ?? ""),
+    district:
+      source.district === null || source.district === undefined
+        ? null
+        : String(source.district),
+    salary_text:
+      source.salary_text === null || source.salary_text === undefined
+        ? null
+        : String(source.salary_text),
+    schedule_text:
+      source.schedule_text === null || source.schedule_text === undefined
+        ? null
+        : String(source.schedule_text),
+    needed_start:
+      source.needed_start === null || source.needed_start === undefined
+        ? null
+        : String(source.needed_start),
+    listing_type: listingType,
+    shift_date:
+      source.shift_date === null || source.shift_date === undefined
+        ? null
+        : String(source.shift_date),
+    shift_start_time:
+      source.shift_start_time === null || source.shift_start_time === undefined
+        ? null
+        : String(source.shift_start_time),
+    shift_end_time:
+      source.shift_end_time === null || source.shift_end_time === undefined
+        ? null
+        : String(source.shift_end_time),
+    urgent_flag: Boolean(source.urgent_flag),
+    slots_count: Number.isFinite(slotsCount) ? slotsCount : null,
+    status: String(source.status ?? "active"),
+    photos: normalizeArrayResponse<VacancyPhoto>(source.photos, [
+      "items",
+      "photos",
+      "results",
+      "data",
+    ]),
+  };
+}
+
+function normalizeMatchItem(raw: unknown): MatchItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  const id = Number(objectValue.id);
+  const candidateId = Number(objectValue.candidate_id);
+  const employerId = Number(objectValue.employer_id);
+  const nestedVacancy =
+    objectValue.vacancy && typeof objectValue.vacancy === "object"
+      ? (objectValue.vacancy as Record<string, unknown>)
+      : null;
+
+  const vacancyId = Number(objectValue.vacancy_id ?? nestedVacancy?.id);
+
+  if (!Number.isFinite(id) || !Number.isFinite(vacancyId)) {
+    return null;
+  }
+
+  const matchScore =
+    objectValue.match_score === null || objectValue.match_score === undefined
+      ? null
+      : Number(objectValue.match_score);
+
+  return {
+    id,
+    candidate_id: Number.isFinite(candidateId) ? candidateId : 0,
+    employer_id: Number.isFinite(employerId) ? employerId : 0,
+    vacancy_id: vacancyId,
+    match_score: Number.isFinite(matchScore) ? matchScore : null,
+    status: String(objectValue.status ?? ""),
+    comment:
+      objectValue.comment === null || objectValue.comment === undefined
+        ? null
+        : String(objectValue.comment),
+  };
+}
+
 function getVacancyCoverPhoto(vacancy: VacancyItem) {
-  if (!vacancy.photos || vacancy.photos.length === 0) {
+  const photos = normalizeArrayResponse<VacancyPhoto>(vacancy.photos, [
+    "items",
+    "photos",
+    "results",
+    "data",
+  ]);
+
+  if (photos.length === 0) {
     return null;
   }
 
   return (
-    vacancy.photos.find((photo) => photo.is_cover) ||
-    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    photos.find((photo) => photo.is_cover) ||
+    [...photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
     null
   );
 }
@@ -435,12 +598,14 @@ function VacancyHeroPhoto({
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(148,163,184,0.14),transparent_35%)]" />
         <div className="relative flex flex-col items-center justify-center px-4 text-center">
           <div className="rounded-2xl bg-white/90 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-slate-200">
-            {vacancy.venue_name}
+            {vacancy.venue_name || "Заведение не указано"}
           </div>
           <div className="mt-3 text-base font-semibold text-slate-800">
             Фото вакансии пока не добавлено
           </div>
-          <div className="mt-1 text-sm text-slate-500">{vacancy.role}</div>
+          <div className="mt-1 text-sm text-slate-500">
+            {vacancy.role || "Без названия"}
+          </div>
         </div>
       </div>
     );
@@ -450,7 +615,9 @@ function VacancyHeroPhoto({
     <div className="relative h-56 w-full overflow-hidden bg-slate-100 sm:h-64">
       <img
         src={normalizeMediaUrl(coverPhoto.photo_url) || ""}
-        alt={`${vacancy.venue_name} — ${vacancy.role}`}
+        alt={`${vacancy.venue_name || "Вакансия"} — ${
+          vacancy.role || "Без названия"
+        }`}
         className="h-full w-full object-cover"
         onError={() => setImageFailed(true)}
       />
@@ -489,14 +656,32 @@ export default function CandidateVacancyDetailsPage() {
         throw new Error("Профиль кандидата не найден");
       }
 
-      const [candidateData, matchesData, allVacancies] = await Promise.all([
+      const [candidateData, matchesRaw, vacanciesRaw] = await Promise.all([
         apiFetch<CandidateItem>("/me/candidate"),
-        apiFetch<MatchItem[]>("/me/candidate/matches"),
-        apiFetch<VacancyItem[]>("/me/candidate/vacancies"),
+        apiFetch<unknown>("/me/candidate/matches"),
+        apiFetch<unknown>("/me/candidate/vacancies"),
       ]);
 
+      const allVacancies = normalizeArrayResponse<unknown>(vacanciesRaw, [
+        "items",
+        "vacancies",
+        "results",
+        "data",
+      ])
+        .map(normalizeVacancyItem)
+        .filter(Boolean) as VacancyItem[];
+
+      const matchesData = normalizeArrayResponse<unknown>(matchesRaw, [
+        "items",
+        "matches",
+        "results",
+        "data",
+      ])
+        .map(normalizeMatchItem)
+        .filter(Boolean) as MatchItem[];
+
       const vacancyData =
-        (allVacancies || []).find((item) => item.id === vacancyId) || null;
+        allVacancies.find((item) => item.id === vacancyId) || null;
 
       if (!candidateData) {
         throw new Error("Кандидат не найден");
@@ -507,7 +692,7 @@ export default function CandidateVacancyDetailsPage() {
       }
 
       const currentMatch =
-        (matchesData || []).find((item) => item.vacancy_id === vacancyId) || null;
+        matchesData.find((item) => item.vacancy_id === vacancyId) || null;
 
       setCandidate(candidateData);
       setVacancy(vacancyData);
@@ -667,11 +852,11 @@ export default function CandidateVacancyDetailsPage() {
                 </div>
 
                 <h1 className="mt-3 text-2xl font-semibold text-slate-900">
-                  {vacancy.role}
+                  {vacancy.role || "Без названия"}
                 </h1>
 
                 <div className="mt-1 text-sm text-slate-700">
-                  {vacancy.venue_name}
+                  {vacancy.venue_name || "Заведение не указано"}
                 </div>
 
                 {vacancy.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
@@ -682,7 +867,7 @@ export default function CandidateVacancyDetailsPage() {
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                    {vacancy.city}
+                    {vacancy.city || "Локация не указана"}
                     {vacancy.district ? `, ${vacancy.district}` : ""}
                   </span>
 
@@ -841,13 +1026,16 @@ export default function CandidateVacancyDetailsPage() {
               {getListingTypeLabel(vacancy.listing_type)}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Роль:</span> {vacancy.role}
+              <span className="font-medium text-slate-900">Роль:</span>{" "}
+              {vacancy.role || "Без названия"}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Заведение:</span> {vacancy.venue_name}
+              <span className="font-medium text-slate-900">Заведение:</span>{" "}
+              {vacancy.venue_name || "Заведение не указано"}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Город:</span> {vacancy.city}
+              <span className="font-medium text-slate-900">Город:</span>{" "}
+              {vacancy.city || "Локация не указана"}
             </div>
             <div>
               <span className="font-medium text-slate-900">Район:</span>{" "}
@@ -901,10 +1089,11 @@ export default function CandidateVacancyDetailsPage() {
             </div>
             <div>
               <span className="font-medium text-slate-900">Основная роль:</span>{" "}
-              {candidate.primary_role}
+              {candidate.primary_role || "Не указана"}
             </div>
             <div>
-              <span className="font-medium text-slate-900">Город:</span> {candidate.city}
+              <span className="font-medium text-slate-900">Город:</span>{" "}
+              {candidate.city || "Не указан"}
             </div>
             <div>
               <span className="font-medium text-slate-900">Район:</span>{" "}

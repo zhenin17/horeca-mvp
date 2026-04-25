@@ -39,7 +39,16 @@ type VacancyForm = {
 type FieldErrors = Partial<Record<keyof VacancyForm, string>>;
 
 type CreatedVacancyResponse = {
-  id: number;
+  id?: number;
+  item?: {
+    id?: number;
+  };
+  vacancy?: {
+    id?: number;
+  };
+  data?: {
+    id?: number;
+  };
 };
 
 type EmployerItem = {
@@ -83,13 +92,37 @@ function validateForm(form: VacancyForm): FieldErrors {
     if (
       form.shift_start_time.trim() &&
       form.shift_end_time.trim() &&
-      form.shift_start_time >= form.shift_end_time
+      form.shift_start_time === form.shift_end_time
     ) {
-      errors.shift_end_time = "Время окончания должно быть позже начала";
+      errors.shift_end_time = "Время начала и окончания смены не должно совпадать";
     }
   }
 
   return errors;
+}
+
+function getCreatedVacancyId(data: CreatedVacancyResponse | null | undefined) {
+  if (!data) {
+    return null;
+  }
+
+  if (typeof data.id === "number") {
+    return data.id;
+  }
+
+  if (typeof data.item?.id === "number") {
+    return data.item.id;
+  }
+
+  if (typeof data.vacancy?.id === "number") {
+    return data.vacancy.id;
+  }
+
+  if (typeof data.data?.id === "number") {
+    return data.data.id;
+  }
+
+  return null;
 }
 
 function inputClass(hasError?: boolean) {
@@ -339,8 +372,7 @@ export default function EmployerCreateVacancyPage() {
         payload
       );
 
-      const createdVacancyId =
-        typeof data?.id === "number" ? data.id : null;
+      const createdVacancyId = getCreatedVacancyId(data);
 
       if (selectedPhotoFile && createdVacancyId) {
         try {
@@ -395,7 +427,7 @@ export default function EmployerCreateVacancyPage() {
 
   if (!currentUser?.is_employer || !currentUser.employer_id) {
     return (
-      <main className="px-4 py-6 space-y-4">
+      <main className="space-y-4 px-4 py-6">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
           Сначала нужно создать профиль работодателя.
         </div>
@@ -411,7 +443,7 @@ export default function EmployerCreateVacancyPage() {
 
   if (!employer) {
     return (
-      <main className="px-4 py-6 space-y-4">
+      <main className="space-y-4 px-4 py-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText || "Не удалось загрузить профиль работодателя"}
         </div>
@@ -788,6 +820,14 @@ export default function EmployerCreateVacancyPage() {
                     Срочная смена
                   </span>
                 </label>
+
+                {form.shift_start_time &&
+                form.shift_end_time &&
+                form.shift_start_time > form.shift_end_time ? (
+                  <div className="mt-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100">
+                    Это ночная смена: окончание будет считаться на следующий день.
+                  </div>
+                ) : null}
               </div>
             </>
           ) : null}
