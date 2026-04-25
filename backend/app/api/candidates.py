@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.dependencies.auth import get_current_user, require_admin
 from app.models.candidate import Candidate
 from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
-from app.models.vacancy import Vacancy
 from app.models.funnel_event import FunnelEvent
+from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.schemas.candidate import (
     CandidateAvailabilityCreate,
@@ -22,6 +23,7 @@ from app.schemas.candidate import (
 )
 from app.schemas.candidate_dashboard import CandidateDashboardRead
 from app.schemas.reliability import CandidateReliabilityRead
+from app.services.auth import CurrentUserContext
 from app.services.reliability import calculate_candidate_reliability
 from app.services.scoring import calculate_final_match_score
 
@@ -34,8 +36,38 @@ CANDIDATE_UPLOADS_DIR = UPLOADS_DIR / "candidates"
 ALLOWED_SLOT_TYPES = {"morning", "day", "evening", "night", "full_day"}
 
 
+def require_candidate_owner_or_admin(
+    candidate_id: int,
+    current_user: CurrentUserContext,
+    db: Session,
+) -> Candidate:
+    candidate = (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .filter(Candidate.id == candidate_id)
+        .first()
+    )
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    if current_user.is_admin:
+        return candidate
+
+    if not current_user.is_candidate or current_user.candidate_id is None:
+        raise HTTPException(status_code=403, detail="Candidate or admin access required")
+
+    if current_user.candidate_id != candidate_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return candidate
+
+
 @router.post("/", response_model=CandidateRead)
-def create_candidate(payload: CandidateCreate, db: Session = Depends(get_db)):
+def create_candidate(
+    payload: CandidateCreate,
+    current_user: CurrentUserContext = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     candidate = Candidate(
         full_name=payload.full_name,
         phone=payload.phone,
@@ -59,7 +91,10 @@ def create_candidate(payload: CandidateCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=list[CandidateRead])
-def list_candidates(db: Session = Depends(get_db)):
+def list_candidates(
+    current_user: CurrentUserContext = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     return (
         db.query(Candidate)
         .options(selectinload(Candidate.photos))
@@ -69,23 +104,23 @@ def list_candidates(db: Session = Depends(get_db)):
 
 
 @router.get("/{candidate_id}", response_model=CandidateRead)
-def get_candidate(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = (
-        db.query(Candidate)
-        .options(selectinload(Candidate.photos))
-        .filter(Candidate.id == candidate_id)
-        .first()
-    )
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def get_candidate(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    candidate = require_candidate_owner_or_admin(candidate_id, current_user, db)
     return candidate
 
 
 @router.patch("/{candidate_id}", response_model=CandidateRead)
-def update_candidate(candidate_id: int, payload: CandidateCreate, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def update_candidate(
+    candidate_id: int,
+    payload: CandidateCreate,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    candidate = require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     candidate.full_name = payload.full_name
     candidate.phone = payload.phone
@@ -108,10 +143,12 @@ def update_candidate(candidate_id: int, payload: CandidateCreate, db: Session = 
 
 
 @router.get("/{candidate_id}/availability", response_model=list[CandidateAvailabilityRead])
-def list_candidate_availability(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def list_candidate_availability(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     return (
         db.query(CandidateAvailability)
@@ -128,11 +165,10 @@ def list_candidate_availability(candidate_id: int, db: Session = Depends(get_db)
 def create_candidate_availability(
     candidate_id: int,
     payload: CandidateAvailabilityCreate,
+    current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     if payload.slot_type not in ALLOWED_SLOT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid slot_type")
@@ -155,8 +191,11 @@ def create_candidate_availability(
 def delete_candidate_availability(
     candidate_id: int,
     availability_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
+
     availability = (
         db.query(CandidateAvailability)
         .filter(CandidateAvailability.id == availability_id)
@@ -172,10 +211,12 @@ def delete_candidate_availability(
 
 
 @router.get("/{candidate_id}/photos", response_model=list[CandidatePhotoRead])
-def list_candidate_photos(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def list_candidate_photos(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     return (
         db.query(CandidatePhoto)
@@ -186,10 +227,13 @@ def list_candidate_photos(candidate_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{candidate_id}/photos", response_model=CandidatePhotoRead)
-def add_candidate_photo(candidate_id: int, payload: CandidatePhotoCreate, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def add_candidate_photo(
+    candidate_id: int,
+    payload: CandidatePhotoCreate,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     existing_count = (
         db.query(CandidatePhoto)
@@ -224,11 +268,10 @@ async def upload_candidate_photo(
     file: UploadFile = File(...),
     is_cover: bool = False,
     sort_order: int = 0,
+    current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="File name is empty")
@@ -288,7 +331,14 @@ async def upload_candidate_photo(
 
 
 @router.delete("/{candidate_id}/photos/{photo_id}")
-def delete_candidate_photo(candidate_id: int, photo_id: int, db: Session = Depends(get_db)):
+def delete_candidate_photo(
+    candidate_id: int,
+    photo_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
+
     photo = (
         db.query(CandidatePhoto)
         .filter(CandidatePhoto.id == photo_id)
@@ -310,26 +360,29 @@ def delete_candidate_photo(candidate_id: int, photo_id: int, db: Session = Depen
 
 
 @router.get("/{candidate_id}/matches")
-def get_candidate_matches(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def get_candidate_matches(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_candidate_owner_or_admin(candidate_id, current_user, db)
 
-    matches = (
+    return (
         db.query(VacancyCandidateMatch)
         .filter(VacancyCandidateMatch.candidate_id == candidate_id)
         .order_by(VacancyCandidateMatch.id.desc())
         .all()
     )
 
-    return matches
-
 
 @router.get("/{candidate_id}/suggested-vacancies")
-def get_candidate_suggested_vacancies(candidate_id: int, limit: int = 10, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def get_candidate_suggested_vacancies(
+    candidate_id: int,
+    limit: int = 10,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    candidate = require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     vacancies = db.query(Vacancy).all()
 
@@ -357,10 +410,12 @@ def get_candidate_suggested_vacancies(candidate_id: int, limit: int = 10, db: Se
 
 
 @router.get("/{candidate_id}/dashboard", response_model=CandidateDashboardRead)
-def get_candidate_dashboard(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def get_candidate_dashboard(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    candidate = require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     matches = (
         db.query(VacancyCandidateMatch, Vacancy)
@@ -409,10 +464,12 @@ def get_candidate_dashboard(candidate_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{candidate_id}/reliability", response_model=CandidateReliabilityRead)
-def get_candidate_reliability(candidate_id: int, db: Session = Depends(get_db)):
-    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
+def get_candidate_reliability(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    candidate = require_candidate_owner_or_admin(candidate_id, current_user, db)
 
     events = (
         db.query(FunnelEvent)

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getCurrentEmployerId } from "@/lib/current-user";
+import type { CurrentUserRead } from "@/lib/current-user";
+import { apiFetch } from "@/lib/api";
 import { isTelegramWebApp } from "@/lib/telegram";
 
 type EmployerItem = {
@@ -12,63 +13,53 @@ type EmployerItem = {
   phone: string;
   telegram_username?: string | null;
   city: string;
+  website?: string | null;
 };
 
 export default function EmployerStartPage() {
-  const [employers, setEmployers] = useState<EmployerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
   const [isReady, setIsReady] = useState(false);
-  const [currentEmployerId, setCurrentEmployerId] = useState<number | null>(null);
   const [isTelegram, setIsTelegram] = useState(false);
 
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
+  const [employer, setEmployer] = useState<EmployerItem | null>(null);
+
   useEffect(() => {
-    setCurrentEmployerId(getCurrentEmployerId());
     setIsTelegram(isTelegramWebApp());
     setIsReady(true);
 
-    async function loadEmployers() {
+    async function loadEmployer() {
       try {
         setErrorText("");
 
-        const response = await fetch("/api/employers/", {
-          cache: "no-store",
-        });
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
+        setCurrentUser(me);
 
-        const contentType = response.headers.get("content-type") || "";
-        const text = await response.text();
-
-        if (!response.ok) {
-          throw new Error(`Не удалось загрузить работодателей (${response.status})`);
-        }
-
-        if (!text.trim()) {
-          setEmployers([]);
+        if (!me.is_employer || !me.employer_id) {
+          setEmployer(null);
           return;
         }
 
-        if (!contentType.includes("application/json")) {
-          throw new Error("Сервер вернул не JSON, а другой формат ответа");
-        }
-
-        const data = JSON.parse(text) as EmployerItem[];
-
-        setEmployers(Array.isArray(data) ? data : []);
+        const employerData = await apiFetch<EmployerItem>("/me/employer");
+        setEmployer(employerData);
       } catch (error) {
         console.error(error);
 
         if (error instanceof Error) {
           setErrorText(error.message);
         } else {
-          setErrorText("Не удалось загрузить работодателей");
+          setErrorText("Не удалось загрузить кабинет работодателя");
         }
       } finally {
         setLoading(false);
       }
     }
 
-    void loadEmployers();
+    void loadEmployer();
   }, []);
+
+  const currentEmployerId = currentUser?.employer_id ?? employer?.id ?? null;
 
   return (
     <main className={`px-4 ${isTelegram ? "space-y-5 py-5" : "space-y-6 py-6"}`}>
@@ -86,9 +77,7 @@ export default function EmployerStartPage() {
             </p>
 
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-              {isTelegram
-                ? "Добро пожаловать в Hubsty для работодателя"
-                : "Добро пожаловать в Hubsty для работодателя"}
+              Добро пожаловать в Hubsty для работодателя
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -130,7 +119,11 @@ export default function EmployerStartPage() {
               )}
 
               <Link
-                href={currentEmployerId ? `/employer/${currentEmployerId}/create-vacancies` : "/employer/onboarding"}
+                href={
+                  currentEmployerId
+                    ? `/employer/${currentEmployerId}/create-vacancies`
+                    : "/employer/onboarding"
+                }
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Создать вакансию
@@ -154,50 +147,50 @@ export default function EmployerStartPage() {
           {currentEmployerId ? "Ваш кабинет" : "Как это работает"}
         </h2>
 
-        {currentEmployerId && isReady ? (
+        {loading ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+            Загрузка...
+          </div>
+        ) : errorText ? (
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {errorText}
+          </div>
+        ) : currentEmployerId && isReady ? (
           <div className="mt-4">
-            {(() => {
-              const currentEmployer =
-                employers.find((item) => item.id === currentEmployerId) || null;
-
-              if (!currentEmployer) {
-                return (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                    Не удалось найти текущий кабинет работодателя.
-                  </div>
-                );
-              }
-
-              return (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="text-lg font-semibold text-slate-900">
-                    {currentEmployer.company_name}
-                  </div>
-
-                  <div className="mt-2 space-y-1 text-sm text-slate-600">
-                    <div>Контакт: {currentEmployer.contact_name}</div>
-                    <div>Телефон: {currentEmployer.phone}</div>
-                    <div>Город: {currentEmployer.city}</div>
-                  </div>
-
-                  <div className={`mt-4 flex ${isTelegram ? "flex-col" : "flex-wrap"} gap-3`}>
-                    <Link
-                      href={`/employer/${currentEmployer.id}`}
-                      className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
-                    >
-                      Открыть кабинет
-                    </Link>
-
-                    <Link
-                      href={`/employer/${currentEmployer.id}/create-vacancies`}
-                      className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      Создать вакансию
-                    </Link>
-                  </div>
+            {!employer ? (
+              <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+                Не удалось найти текущий кабинет работодателя.
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-lg font-semibold text-slate-900">
+                  {employer.company_name}
                 </div>
-              );
-            })()}
+
+                <div className="mt-2 space-y-1 text-sm text-slate-600">
+                  <div>Контакт: {employer.contact_name}</div>
+                  <div>Телефон: {employer.phone}</div>
+                  <div>Город: {employer.city}</div>
+                  {employer.website ? <div>Сайт: {employer.website}</div> : null}
+                </div>
+
+                <div className={`mt-4 flex ${isTelegram ? "flex-col" : "flex-wrap"} gap-3`}>
+                  <Link
+                    href={`/employer/${employer.id}`}
+                    className="rounded-2xl bg-slate-900 px-5 py-3 text-center text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    Открыть кабинет
+                  </Link>
+
+                  <Link
+                    href={`/employer/${employer.id}/create-vacancies`}
+                    className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Создать вакансию
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -223,78 +216,6 @@ export default function EmployerStartPage() {
                 Работаете со статусами: просмотр, приглашение, интервью, выход и итог.
               </div>
             </div>
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Текущие работодатели</h2>
-
-        {loading ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-            Загрузка...
-          </div>
-        ) : errorText ? (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {errorText}
-          </div>
-        ) : employers.length === 0 ? (
-          <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-            Пока нет работодателей. Можно создать первого.
-          </div>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {employers.map((employer) => {
-              const isCurrent = employer.id === currentEmployerId;
-
-              return (
-                <div
-                  key={employer.id}
-                  className={`rounded-2xl border p-4 ${
-                    isCurrent
-                      ? "border-violet-200 bg-violet-50/60"
-                      : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="font-medium text-slate-900">{employer.company_name}</div>
-                      <div className="text-sm text-slate-600">
-                        Контакт: {employer.contact_name}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        Телефон: {employer.phone}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">
-                        Город: {employer.city}
-                      </div>
-
-                      {isCurrent ? (
-                        <div className="mt-2 inline-flex rounded-full bg-white px-3 py-1 text-xs font-medium text-violet-700 ring-1 ring-violet-200">
-                          Текущий кабинет
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className={`flex ${isTelegram ? "flex-col" : "flex-wrap"} gap-3`}>
-                      <Link
-                        href={`/employer/${employer.id}`}
-                        className="rounded-2xl bg-slate-900 px-4 py-2 text-center text-sm font-medium text-white hover:opacity-90"
-                      >
-                        Открыть
-                      </Link>
-
-                      <Link
-                        href={`/employer/${employer.id}/create-vacancies`}
-                        className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-center text-sm font-medium text-slate-700 hover:bg-slate-50"
-                      >
-                        Создать вакансию
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </section>

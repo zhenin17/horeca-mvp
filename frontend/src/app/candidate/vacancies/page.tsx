@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { normalizeMediaUrl } from "@/lib/api";
-import { getCurrentCandidateId } from "@/lib/current-user";
+import { apiFetch, normalizeMediaUrl } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateItem = {
   id: number;
@@ -70,20 +70,6 @@ type VacancyCardItem = VacancyItem & {
 
 type VacancyFilter = "all" | "fresh" | "applied";
 type ListingTypeFilter = "all" | "job" | "part_time" | "shift";
-
-async function readJsonSafe<T>(response: Response): Promise<T | null> {
-  const text = await response.text();
-
-  if (!text.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
 
 function isTelegramMiniApp() {
   if (typeof window === "undefined") {
@@ -547,36 +533,16 @@ export default function CandidateVacanciesPage() {
       setErrorText("");
       setMessageText("");
 
-      const candidateId = getCurrentCandidateId();
-
-      const [candidateResponse, vacanciesResponse, matchesResponse] =
-        await Promise.all([
-          fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
-          fetch("/api/vacancies/", { cache: "no-store" }),
-          fetch(`/api/matches/?candidate_id=${candidateId}`, {
-            cache: "no-store",
-          }),
-        ]);
-
-      if (!candidateResponse.ok) {
-        throw new Error("Не удалось загрузить кандидата");
+      const me = await apiFetch<CurrentUserRead>("/auth/me");
+      if (!me.is_candidate || !me.candidate_id) {
+        throw new Error("Профиль кандидата не найден");
       }
 
-      if (!vacanciesResponse.ok) {
-        throw new Error("Не удалось загрузить вакансии");
-      }
-
-      if (!matchesResponse.ok) {
-        throw new Error("Не удалось загрузить отклики");
-      }
-
-      const candidateData = await readJsonSafe<CandidateItem>(candidateResponse);
-      const vacanciesData = await readJsonSafe<VacancyItem[]>(vacanciesResponse);
-      const matchesData = await readJsonSafe<MatchItem[]>(matchesResponse);
-
-      if (!candidateData) {
-        throw new Error("Кандидат не найден");
-      }
+      const [candidateData, vacanciesData, matchesData] = await Promise.all([
+        apiFetch<CandidateItem>("/me/candidate"),
+        apiFetch<VacancyItem[]>("/me/candidate/vacancies"),
+        apiFetch<MatchItem[]>("/me/candidate/matches"),
+      ]);
 
       const matchByVacancyId = new Map<number, MatchItem>();
       for (const match of matchesData || []) {

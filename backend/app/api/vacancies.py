@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.dependencies.auth import get_current_user
 from app.models.candidate import Candidate
 from app.models.funnel_event import FunnelEvent
 from app.models.vacancy import Vacancy
@@ -13,6 +14,7 @@ from app.models.vacancy_candidate_match import VacancyCandidateMatch
 from app.models.vacancy_photo import VacancyPhoto
 from app.schemas.application import CandidateApplyCreate
 from app.schemas.vacancy import VacancyCreate, VacancyPhotoCreate, VacancyPhotoRead, VacancyRead
+from app.services.auth import CurrentUserContext
 from app.services.scoring import calculate_final_match_score
 
 router = APIRouter(prefix="/vacancies", tags=["Vacancies"])
@@ -22,10 +24,46 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 VACANCY_UPLOADS_DIR = UPLOADS_DIR / "vacancies"
 
 
+def require_vacancy_owner_or_admin(
+    vacancy_id: int,
+    current_user: CurrentUserContext,
+    db: Session,
+) -> Vacancy:
+    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    if current_user.is_admin:
+        return vacancy
+
+    if not current_user.is_employer or current_user.employer_id is None:
+        raise HTTPException(status_code=403, detail="Employer or admin access required")
+
+    if vacancy.employer_id != current_user.employer_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    return vacancy
+
+
 @router.post("/", response_model=VacancyRead)
-def create_vacancy(payload: VacancyCreate, db: Session = Depends(get_db)):
+def create_vacancy(
+    payload: VacancyCreate,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.is_admin:
+        employer_id = payload.employer_id
+    else:
+        if not current_user.is_employer or current_user.employer_id is None:
+            raise HTTPException(status_code=403, detail="Employer or admin access required")
+
+        if payload.employer_id != current_user.employer_id:
+            raise HTTPException(status_code=403, detail="Cannot create vacancy for another employer")
+
+        employer_id = current_user.employer_id
+
     vacancy = Vacancy(
-        employer_id=payload.employer_id,
+        employer_id=employer_id,
         role=payload.role,
         venue_name=payload.venue_name,
         city=payload.city,
@@ -76,11 +114,12 @@ def get_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{vacancy_id}/close", response_model=VacancyRead)
-def close_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
-    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
-    if not vacancy:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
-
+def close_vacancy(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    vacancy = require_vacancy_owner_or_admin(vacancy_id, current_user, db)
     vacancy.status = "closed"
     db.commit()
 
@@ -93,11 +132,12 @@ def close_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{vacancy_id}/archive", response_model=VacancyRead)
-def archive_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
-    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
-    if not vacancy:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
-
+def archive_vacancy(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    vacancy = require_vacancy_owner_or_admin(vacancy_id, current_user, db)
     vacancy.status = "archived"
     db.commit()
 
@@ -110,11 +150,12 @@ def archive_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{vacancy_id}/reopen", response_model=VacancyRead)
-def reopen_vacancy(vacancy_id: int, db: Session = Depends(get_db)):
-    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
-    if not vacancy:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
-
+def reopen_vacancy(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    vacancy = require_vacancy_owner_or_admin(vacancy_id, current_user, db)
     vacancy.status = "in_progress"
     db.commit()
 
@@ -141,10 +182,13 @@ def list_vacancy_photos(vacancy_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{vacancy_id}/photos", response_model=VacancyPhotoRead)
-def add_vacancy_photo(vacancy_id: int, payload: VacancyPhotoCreate, db: Session = Depends(get_db)):
-    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
-    if not vacancy:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
+def add_vacancy_photo(
+    vacancy_id: int,
+    payload: VacancyPhotoCreate,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_vacancy_owner_or_admin(vacancy_id, current_user, db)
 
     existing_count = (
         db.query(VacancyPhoto)
@@ -179,11 +223,10 @@ async def upload_vacancy_photo(
     file: UploadFile = File(...),
     is_cover: bool = False,
     sort_order: int = 0,
+    current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    vacancy = db.query(Vacancy).filter(Vacancy.id == vacancy_id).first()
-    if not vacancy:
-        raise HTTPException(status_code=404, detail="Vacancy not found")
+    require_vacancy_owner_or_admin(vacancy_id, current_user, db)
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="File name is empty")
@@ -243,7 +286,14 @@ async def upload_vacancy_photo(
 
 
 @router.delete("/{vacancy_id}/photos/{photo_id}")
-def delete_vacancy_photo(vacancy_id: int, photo_id: int, db: Session = Depends(get_db)):
+def delete_vacancy_photo(
+    vacancy_id: int,
+    photo_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_vacancy_owner_or_admin(vacancy_id, current_user, db)
+
     photo = (
         db.query(VacancyPhoto)
         .filter(VacancyPhoto.id == photo_id)
@@ -268,12 +318,24 @@ def delete_vacancy_photo(vacancy_id: int, photo_id: int, db: Session = Depends(g
 def apply_to_vacancy(
     vacancy_id: int,
     payload: CandidateApplyCreate,
+    current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if payload.vacancy_id != vacancy_id:
         raise HTTPException(status_code=400, detail="vacancy_id mismatch")
 
-    candidate = db.query(Candidate).filter(Candidate.id == payload.candidate_id).first()
+    if current_user.is_admin:
+        candidate_id = payload.candidate_id
+    else:
+        if not current_user.is_candidate or current_user.candidate_id is None:
+            raise HTTPException(status_code=403, detail="Candidate or admin access required")
+
+        if payload.candidate_id != current_user.candidate_id:
+            raise HTTPException(status_code=403, detail="Cannot apply for another candidate")
+
+        candidate_id = current_user.candidate_id
+
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
@@ -315,7 +377,7 @@ def apply_to_vacancy(
         employer_id=vacancy.employer_id,
         vacancy_id=vacancy.id,
         event_type="candidate_applied",
-        event_source="candidate_api",
+        event_source="candidate_api" if not current_user.is_admin else "admin_api",
         comment=f"match_id={match.id}",
     )
     db.add(event)

@@ -5,9 +5,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.app_public import router as app_public_router
+from app.api.auth import router as auth_router
 from app.api.candidates import router as candidates_router
 from app.api.employers import router as employers_router
 from app.api.funnel_events import router as funnel_events_router
+from app.api.me_candidate import router as me_candidate_router
+from app.api.me_candidate_availability import router as me_candidate_availability_router
+from app.api.me_candidate_dashboard import router as me_candidate_dashboard_router
+from app.api.me_candidate_matches import router as me_candidate_matches_router
+from app.api.me_candidate_reliability import router as me_candidate_reliability_router
+from app.api.me_candidate_vacancies import router as me_candidate_vacancies_router
+from app.api.me_employer import router as me_employer_router
+from app.api.me_employer_matches import router as me_employer_matches_router
+from app.api.me_employer_vacancies import router as me_employer_vacancies_router
 from app.api.shortlists import router as shortlists_router
 from app.api.telegram import router as telegram_router
 from app.api.vacancies import router as vacancies_router
@@ -25,14 +35,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:3010",
-        "http://127.0.0.1:3010",
-    ],
+    allow_origins=settings.allowed_cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +55,17 @@ def serve_upload(file_path: str):
 
     return FileResponse(target)
 
+
+app.include_router(auth_router)
+app.include_router(me_candidate_router)
+app.include_router(me_candidate_availability_router)
+app.include_router(me_candidate_dashboard_router)
+app.include_router(me_candidate_matches_router)
+app.include_router(me_candidate_reliability_router)
+app.include_router(me_candidate_vacancies_router)
+app.include_router(me_employer_router)
+app.include_router(me_employer_matches_router)
+app.include_router(me_employer_vacancies_router)
 
 app.include_router(app_public_router)
 app.include_router(candidates_router)

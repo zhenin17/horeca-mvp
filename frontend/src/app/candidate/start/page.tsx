@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatReadyToStart } from "@/lib/format";
-import { getCurrentCandidateId } from "@/lib/current-user";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateProfileStatus = {
   id: number;
@@ -51,24 +51,33 @@ export default function CandidateStartPage() {
   const [isTelegram, setIsTelegram] = useState(false);
 
   useEffect(() => {
-    setIsTelegram(detectTelegramWebApp());
-
-    const candidateId = getCurrentCandidateId();
-
-    apiFetch<CandidateProfileStatus>(`/candidates/${candidateId}`)
-      .then((data) => {
-        setCandidate(data);
+    async function load() {
+      try {
+        setLoading(true);
         setErrorText("");
-      })
-      .catch((error) => {
+        setIsTelegram(detectTelegramWebApp());
+
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
+
+        if (!me.is_candidate || !me.candidate_id) {
+          throw new Error("Профиль кандидата не найден");
+        }
+
+        const data = await apiFetch<CandidateProfileStatus>("/me/candidate");
+        setCandidate(data);
+      } catch (error) {
         console.error(error);
         if (error instanceof Error) {
           setErrorText(error.message);
         } else {
           setErrorText("Не удалось загрузить профиль");
         }
-      })
-      .finally(() => setLoading(false));
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
   }, []);
 
   const nextStep = useMemo(() => {

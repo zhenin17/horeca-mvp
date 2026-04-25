@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { uploadVacancyPhoto } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
 import {
   CITY_OPTIONS,
   ROLE_OPTIONS,
@@ -35,6 +36,16 @@ type FieldErrors = Partial<Record<keyof VacancyForm, string>>;
 
 type CreatedVacancyResponse = {
   id: number;
+};
+
+type EmployerItem = {
+  id: number;
+  company_name: string;
+  contact_name: string;
+  phone: string;
+  telegram_username?: string | null;
+  city: string;
+  website?: string | null;
 };
 
 function validateForm(form: VacancyForm): FieldErrors {
@@ -126,10 +137,11 @@ function photoButtonClass(disabled?: boolean) {
 }
 
 export default function EmployerCreateVacancyPage() {
-  const params = useParams<{ id: string }>();
   const router = useRouter();
 
-  const employerId = Number(params?.id);
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
+  const [employer, setEmployer] = useState<EmployerItem | null>(null);
+  const [bootLoading, setBootLoading] = useState(true);
 
   const [form, setForm] = useState<VacancyForm>({
     listing_type: "job",
@@ -157,15 +169,52 @@ export default function EmployerCreateVacancyPage() {
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
   const [photoErrorText, setPhotoErrorText] = useState("");
 
-  const isEmployerIdValid = useMemo(() => Number.isFinite(employerId), [employerId]);
   const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
   const isShift = form.listing_type === "shift";
 
   useEffect(() => {
-    if (typeof window !== "undefined" && Number.isFinite(employerId)) {
-      window.localStorage.setItem("hubsty_employer_id", String(employerId));
+    async function bootstrap() {
+      try {
+        setBootLoading(true);
+        setErrorText("");
+
+        const [meResponse, employerResponse] = await Promise.all([
+          fetch("/api/auth/me", { cache: "no-store" }),
+          fetch("/api/me/employer", { cache: "no-store" }),
+        ]);
+
+        if (!meResponse.ok) {
+          throw new Error("Не удалось загрузить текущего пользователя");
+        }
+
+        const me = (await meResponse.json()) as CurrentUserRead;
+        setCurrentUser(me);
+
+        if (!me.is_employer || !me.employer_id) {
+          throw new Error("Профиль работодателя не найден");
+        }
+
+        if (!employerResponse.ok) {
+          throw new Error("Не удалось загрузить данные работодателя");
+        }
+
+        const employerData = (await employerResponse.json()) as EmployerItem;
+        setEmployer(employerData);
+      } catch (error) {
+        console.error(error);
+
+        if (error instanceof Error) {
+          setErrorText(error.message);
+        } else {
+          setErrorText("Не удалось открыть создание вакансии");
+        }
+      } finally {
+        setBootLoading(false);
+      }
     }
-  }, [employerId]);
+
+    void bootstrap();
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -254,8 +303,8 @@ export default function EmployerCreateVacancyPage() {
         return;
       }
 
-      if (!isEmployerIdValid) {
-        throw new Error("Некорректный идентификатор работодателя");
+      if (!currentUser?.is_employer || !currentUser.employer_id) {
+        throw new Error("Работодатель не определен");
       }
 
       setSaving(true);
@@ -269,7 +318,6 @@ export default function EmployerCreateVacancyPage() {
       };
 
       const payload = {
-        employer_id: employerId,
         listing_type: form.listing_type,
         role: form.role.trim(),
         venue_name: form.venue_name.trim(),
@@ -277,9 +325,7 @@ export default function EmployerCreateVacancyPage() {
         district: form.district.trim() || null,
         salary_text: form.salary_text.trim() || null,
         schedule_text:
-          form.listing_type === "shift"
-            ? null
-            : form.schedule_text.trim() || null,
+          form.listing_type === "shift" ? null : form.schedule_text.trim() || null,
         needed_start: form.needed_start
           ? readyToStartMap[form.needed_start] || form.needed_start.trim()
           : null,
@@ -296,7 +342,7 @@ export default function EmployerCreateVacancyPage() {
         status: form.status,
       };
 
-      const response = await fetch("/api/vacancies/", {
+      const response = await fetch("/api/me/employer/vacancies", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -356,7 +402,7 @@ export default function EmployerCreateVacancyPage() {
       }
 
       setTimeout(() => {
-        router.push(`/employer/${employerId}`);
+        router.push(`/employer/${currentUser.employer_id}`);
       }, 900);
     } catch (error) {
       console.error(error);
@@ -371,11 +417,21 @@ export default function EmployerCreateVacancyPage() {
     }
   }
 
-  if (!isEmployerIdValid) {
+  if (bootLoading) {
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка...
+        </div>
+      </main>
+    );
+  }
+
+  if (!currentUser?.is_employer || !currentUser.employer_id || !employer) {
     return (
       <main className="px-4 py-6">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Некорректный идентификатор работодателя
+          {errorText || "Профиль работодателя не найден"}
         </div>
       </main>
     );
@@ -395,11 +451,15 @@ export default function EmployerCreateVacancyPage() {
                 Сначала выбери тип объявления, потом заполни основные поля.
                 Для смены отдельно указываются дата, время и срочность.
               </p>
+
+              <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
+                {employer.company_name}
+              </div>
             </div>
 
             <div className="flex flex-wrap gap-3">
               <Link
-                href={`/employer/${employerId}`}
+                href={`/employer/${currentUser.employer_id}`}
                 className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 Назад в кабинет
@@ -772,7 +832,7 @@ export default function EmployerCreateVacancyPage() {
           </button>
 
           <Link
-            href={`/employer/${employerId}`}
+            href={`/employer/${currentUser.employer_id}`}
             className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Отмена

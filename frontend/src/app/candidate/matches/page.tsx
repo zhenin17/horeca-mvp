@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { normalizeMediaUrl } from "@/lib/api";
-import { getCurrentCandidateId } from "@/lib/current-user";
+import { apiFetch, normalizeMediaUrl } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateItem = {
   id: number;
@@ -47,16 +47,6 @@ type VacancyItem = {
   photos?: VacancyPhoto[];
 };
 
-type EmployerItem = {
-  id: number;
-  company_name: string;
-  contact_name: string;
-  phone: string;
-  telegram_username?: string | null;
-  city: string;
-  website?: string | null;
-};
-
 type MatchItem = {
   id: number;
   candidate_id: number;
@@ -69,25 +59,10 @@ type MatchItem = {
 
 type EnrichedMatchItem = MatchItem & {
   vacancy?: VacancyItem | null;
-  employer?: EmployerItem | null;
 };
 
 type MatchFilter = "all" | "unseen" | "viewed" | "in_work" | "finished";
 type ListingTypeFilter = "all" | "job" | "part_time" | "shift";
-
-async function readJsonSafe<T>(response: Response): Promise<T | null> {
-  const text = await response.text();
-
-  if (!text.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
 
 function isTelegramMiniApp() {
   if (typeof window === "undefined") {
@@ -131,7 +106,7 @@ function statusHint(status: string) {
     case "viewed":
       return "Работодатель уже посмотрел вашу кандидатуру.";
     case "invited":
-      return "Контакт уже открыт. Можно написать или позвонить работодателю.";
+      return "По отклику есть движение со стороны работодателя.";
     case "interviewed":
       return "По вакансии уже идет следующий этап общения.";
     case "offered":
@@ -155,11 +130,11 @@ function nextStepHint(status: string) {
     case "viewed":
       return "Вас уже увидели. Сейчас лучше просто быть на связи.";
     case "invited":
-      return "Лучший следующий шаг — написать или позвонить работодателю.";
+      return "Лучший следующий шаг — открыть вакансию и следить за развитием контакта.";
     case "interviewed":
       return "Лучше продолжить контакт и не терять темп общения.";
     case "offered":
-      return "Сейчас лучше быстро связаться и уточнить детали выхода.";
+      return "Сейчас лучше быстро вернуться к вакансии и уточнить детали выхода.";
     case "hired":
       return "Этот отклик завершен успешно.";
     case "rejected":
@@ -344,28 +319,6 @@ function formatReadyToStart(value?: string | null) {
   }
 }
 
-function canContactEmployer(status: string) {
-  return ["invited", "interviewed", "offered", "hired"].includes(status);
-}
-
-function normalizePhoneHref(phone?: string | null) {
-  if (!phone?.trim()) {
-    return null;
-  }
-
-  const cleaned = phone.replace(/[^\d+]/g, "");
-  return cleaned ? `tel:${cleaned}` : null;
-}
-
-function normalizeTelegramHref(username?: string | null) {
-  if (!username?.trim()) {
-    return null;
-  }
-
-  const cleaned = username.trim().replace(/^@/, "");
-  return cleaned ? `https://t.me/${cleaned}` : null;
-}
-
 function getListingTypeLabel(type?: VacancyItem["listing_type"]) {
   switch (type) {
     case "part_time":
@@ -507,56 +460,27 @@ export default function CandidateMatchesPage() {
       setLoading(true);
       setErrorText("");
 
-      const candidateId = getCurrentCandidateId();
+      const me = await apiFetch<CurrentUserRead>("/auth/me");
 
-      const [candidateResponse, matchesResponse, vacanciesResponse, employersResponse] =
-        await Promise.all([
-          fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
-          fetch(`/api/matches/?candidate_id=${candidateId}`, { cache: "no-store" }),
-          fetch("/api/vacancies/", { cache: "no-store" }),
-          fetch("/api/employers/", { cache: "no-store" }),
-        ]);
-
-        if (!candidateResponse.ok) {
-        throw new Error("Не удалось загрузить данные кандидата");
+      if (!me.is_candidate || !me.candidate_id) {
+        throw new Error("Профиль кандидата не найден");
       }
 
-      if (!matchesResponse.ok) {
-        throw new Error("Не удалось загрузить отклики");
-      }
-
-      if (!vacanciesResponse.ok) {
-        throw new Error("Не удалось загрузить вакансии");
-      }
-
-      if (!employersResponse.ok) {
-        throw new Error("Не удалось загрузить работодателей");
-      }
-
-      const candidateData = await readJsonSafe<CandidateItem>(candidateResponse);
-      const matchesData = await readJsonSafe<MatchItem[]>(matchesResponse);
-      const vacanciesData = await readJsonSafe<VacancyItem[]>(vacanciesResponse);
-      const employersData = await readJsonSafe<EmployerItem[]>(employersResponse);
-
-      if (!candidateData) {
-        throw new Error("Кандидат не найден");
-      }
+      const [candidateData, matchesData, vacanciesData] = await Promise.all([
+        apiFetch<CandidateItem>("/me/candidate"),
+        apiFetch<MatchItem[]>("/me/candidate/matches"),
+        apiFetch<VacancyItem[]>("/me/candidate/vacancies"),
+      ]);
 
       const vacanciesMap = new Map<number, VacancyItem>();
       for (const vacancy of vacanciesData || []) {
         vacanciesMap.set(vacancy.id, vacancy);
       }
 
-      const employersMap = new Map<number, EmployerItem>();
-      for (const employer of employersData || []) {
-        employersMap.set(employer.id, employer);
-      }
-
       const enrichedMatches: EnrichedMatchItem[] = (matchesData || [])
         .map((match) => ({
           ...match,
           vacancy: vacanciesMap.get(match.vacancy_id) || null,
-          employer: employersMap.get(match.employer_id) || null,
         }))
         .sort((a, b) => b.id - a.id);
 
@@ -597,7 +521,7 @@ export default function CandidateMatchesPage() {
 
   const nextStepText = useMemo(() => {
     if (stats.inWork > 0) {
-      return "Сейчас главное — не просто ждать, а быстро выходить на связь там, где контакт уже открыт.";
+      return "Сейчас главное — не просто ждать, а быстро реагировать там, где уже есть движение.";
     }
 
     if (stats.viewed > 0) {
@@ -658,7 +582,7 @@ export default function CandidateMatchesPage() {
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   Здесь видно, где работодатель еще не дошел до отклика, где уже
-                  посмотрел вас и где уже можно переходить к живому контакту.
+                  посмотрел вас и где уже есть движение по вакансии.
                 </p>
 
                 {candidate ? (
@@ -823,11 +747,7 @@ export default function CandidateMatchesPage() {
         <section className="space-y-4">
           {filteredMatches.map((match) => {
             const vacancy = match.vacancy;
-            const employer = match.employer;
             const score = match.match_score ?? 0;
-            const contactOpened = canContactEmployer(match.status);
-            const phoneHref = normalizePhoneHref(employer?.phone);
-            const telegramHref = normalizeTelegramHref(employer?.telegram_username);
 
             return (
               <article
@@ -884,12 +804,6 @@ export default function CandidateMatchesPage() {
                           </div>
                         ) : null}
 
-                        {employer ? (
-                          <div className="mt-1 text-sm text-slate-500">
-                            Работодатель: {employer.company_name}
-                          </div>
-                        ) : null}
-
                         <div className="mt-3 flex flex-wrap gap-2">
                           <span className="rounded-full bg-white/80 px-3 py-1 text-xs text-slate-700">
                             {compactLocation(vacancy)}
@@ -931,60 +845,6 @@ export default function CandidateMatchesPage() {
                           Комментарий:
                         </span>{" "}
                         {match.comment}
-                      </div>
-                    ) : null}
-
-                    {contactOpened ? (
-                      <div className="rounded-2xl border border-emerald-200 bg-white/90 p-4">
-                        <div className="text-sm font-semibold text-emerald-900">
-                          Можно связаться с работодателем
-                        </div>
-
-                        <div className="mt-2 space-y-1 text-sm text-emerald-900">
-                          <div>
-                            Компания: {employer?.company_name || "Не указано"}
-                          </div>
-                          <div>
-                            Контакт: {employer?.contact_name || "Не указано"}
-                          </div>
-                          <div>
-                            Телефон: {employer?.phone || "Не указан"}
-                          </div>
-                          <div>
-                            Telegram:{" "}
-                            {employer?.telegram_username
-                              ? `@${employer.telegram_username}`
-                              : "Не указан"}
-                          </div>
-                        </div>
-
-                        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                          {phoneHref ? (
-                            <a
-                              href={phoneHref}
-                              className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-                            >
-                              Позвонить
-                            </a>
-                          ) : null}
-
-                          {telegramHref ? (
-                            <a
-                              href={telegramHref}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
-                            >
-                              Написать в Telegram
-                            </a>
-                          ) : null}
-
-                          {!phoneHref && !telegramHref ? (
-                            <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                              Контакт открыт, но у работодателя не заполнены телефон и Telegram.
-                            </div>
-                          ) : null}
-                        </div>
                       </div>
                     ) : null}
 

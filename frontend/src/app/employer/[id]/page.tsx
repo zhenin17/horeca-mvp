@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
 import { normalizeMediaUrl } from "@/lib/api";
-import { getCurrentEmployerId } from "@/lib/current-user";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type EmployerItem = {
   id: number;
@@ -87,6 +86,20 @@ type MatchAction = {
   successText: string;
 };
 
+async function readJsonSafe<T>(response: Response): Promise<T | null> {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
 function vacancyStatusLabel(status: string) {
   switch (status) {
     case "new":
@@ -136,14 +149,16 @@ function getReliabilityMeta(score?: number) {
     return {
       label: "Без оценки",
       badgeClassName: "bg-slate-100 text-slate-700",
-      helperText: "Истории пока недостаточно, чтобы сформировать ориентир по выходам.",
+      helperText:
+        "Истории пока недостаточно, чтобы сформировать ориентир по выходам.",
     };
   }
 
   if (score >= 80) {
     return {
       label: "Высокая надежность",
-      badgeClassName: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+      badgeClassName:
+        "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
       helperText: "Оценка формируется по истории выходов и отмен.",
     };
   }
@@ -495,7 +510,9 @@ function buildCandidateFitReasons(
   }
 
   if (match.candidate.horeca_experience_months >= 12) {
-    reasons.push(`Есть опыт: ${formatExperience(match.candidate.horeca_experience_months)}`);
+    reasons.push(
+      `Есть опыт: ${formatExperience(match.candidate.horeca_experience_months)}`
+    );
   } else if (match.candidate.horeca_experience_months > 0) {
     reasons.push("Есть опыт в HoReCa");
   }
@@ -766,13 +783,11 @@ function SelectedVacancyPhoto({
 }
 
 export default function EmployerDashboardPage() {
-  const params = useParams<{ id: string }>();
-  const employerId = Number(params?.id);
-
   const [loading, setLoading] = useState(true);
   const [errorText, setErrorText] = useState("");
   const [messageText, setMessageText] = useState("");
 
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [employer, setEmployer] = useState<EmployerItem | null>(null);
   const [vacancies, setVacancies] = useState<VacancyItem[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
@@ -793,14 +808,25 @@ export default function EmployerDashboardPage() {
       setErrorText("");
       setMessageText("");
 
-      const [employersResponse, vacanciesResponse, matchesResponse] = await Promise.all([
-        fetch("/api/employers/", { cache: "no-store" }),
-        fetch("/api/vacancies/", { cache: "no-store" }),
-        fetch(`/api/matches/?employer_id=${employerId}`, { cache: "no-store" }),
+      const meResponse = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!meResponse.ok) {
+        throw new Error("Не удалось загрузить текущего пользователя");
+      }
+      const me = (await meResponse.json()) as CurrentUserRead;
+      setCurrentUser(me);
+
+      if (!me.is_employer || !me.employer_id) {
+        throw new Error("Профиль работодателя не найден");
+      }
+
+      const [employerResponse, vacanciesResponse, matchesResponse] = await Promise.all([
+        fetch("/api/me/employer", { cache: "no-store" }),
+        fetch("/api/me/employer/vacancies", { cache: "no-store" }),
+        fetch("/api/me/employer/matches", { cache: "no-store" }),
       ]);
 
-      if (!employersResponse.ok) {
-        throw new Error("Не удалось загрузить работодателей");
+      if (!employerResponse.ok) {
+        throw new Error("Не удалось загрузить работодателя");
       }
       if (!vacanciesResponse.ok) {
         throw new Error("Не удалось загрузить вакансии");
@@ -809,29 +835,15 @@ export default function EmployerDashboardPage() {
         throw new Error("Не удалось загрузить кандидатов");
       }
 
-      const employersData = (await employersResponse.json()) as EmployerItem[];
-      const vacanciesData = (await vacanciesResponse.json()) as VacancyItem[];
-      const matchesData = (await matchesResponse.json()) as MatchItem[];
-
-      const currentEmployer =
-        employersData.find((item) => item.id === employerId) || null;
-
-      if (!currentEmployer) {
-        throw new Error("Работодатель не найден");
-      }
-
-      if (typeof window !== "undefined") {
-        const storedEmployerId = getCurrentEmployerId();
-        if (storedEmployerId !== employerId) {
-          window.localStorage.setItem("hubsty_employer_id", String(employerId));
-        }
-      }
-
-      const employerVacancies = vacanciesData
-        .filter((item) => item.employer_id === employerId)
-        .sort((a, b) => b.id - a.id);
+      const currentEmployer = (await employerResponse.json()) as EmployerItem;
+      const vacanciesData =
+        ((await readJsonSafe<VacancyItem[]>(vacanciesResponse)) as VacancyItem[] | null) || [];
+      const matchesData =
+        ((await readJsonSafe<MatchItem[]>(matchesResponse)) as MatchItem[] | null) || [];
 
       setEmployer(currentEmployer);
+
+      const employerVacancies = [...vacanciesData].sort((a, b) => b.id - a.id);
       setVacancies(employerVacancies);
       setMatches(matchesData);
 
@@ -888,18 +900,8 @@ export default function EmployerDashboardPage() {
   }
 
   useEffect(() => {
-    if (!Number.isFinite(employerId)) {
-      setLoading(false);
-      setErrorText("Некорректный идентификатор работодателя");
-      return;
-    }
-
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("hubsty_employer_id", String(employerId));
-    }
-
     void loadPageData();
-  }, [employerId]);
+  }, []);
 
   const vacanciesWithStats = useMemo(() => {
     return vacancies
@@ -974,8 +976,8 @@ export default function EmployerDashboardPage() {
   }, [matches, selectedVacancyId, candidateFilter]);
 
   const dashboardStats = useMemo(() => {
-    const activeVacancies = vacanciesWithStats.filter((item) =>
-      !["closed", "archived"].includes(item.status)
+    const activeVacancies = vacanciesWithStats.filter(
+      (item) => !["closed", "archived"].includes(item.status)
     ).length;
 
     const newCandidates = matches.filter((item) =>
@@ -1012,7 +1014,11 @@ export default function EmployerDashboardPage() {
     return "Кабинет в порядке. Можно обновить вакансии или добавить новую.";
   }, [dashboardStats]);
 
-  async function runMatchAction(matchId: number, endpoint: string, successText: string) {
+  async function runMatchAction(
+    matchId: number,
+    endpoint: string,
+    successText: string
+  ) {
     try {
       setBusyMatchId(matchId);
       setMessageText("");
@@ -1114,7 +1120,7 @@ export default function EmployerDashboardPage() {
     );
   }
 
-  if (!employer) {
+  if (!employer || !currentUser?.employer_id) {
     return (
       <main className="px-4 py-6">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
@@ -1145,7 +1151,7 @@ export default function EmployerDashboardPage() {
 
             <div className="flex flex-wrap gap-3">
               <Link
-                href={`/employer/${employer.id}/create-vacancies`}
+                href={`/employer/${currentUser.employer_id}/create-vacancies`}
                 className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
               >
                 Создать вакансию
@@ -1160,7 +1166,7 @@ export default function EmployerDashboardPage() {
                 Обновить
               </button>
               <Link
-                href={`/about?from=/employer/${employer.id}`}
+                href={`/about?from=/employer/${currentUser.employer_id}`}
                 className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 О приложении
@@ -1254,7 +1260,7 @@ export default function EmployerDashboardPage() {
             </div>
 
             <Link
-              href={`/employer/${employer.id}/create-vacancies`}
+              href={`/employer/${currentUser.employer_id}/create-vacancies`}
               className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Добавить вакансию
@@ -1263,20 +1269,22 @@ export default function EmployerDashboardPage() {
 
           <div>
             <div className="flex flex-wrap gap-2">
-              {(["all", "job", "part_time", "shift"] as VacancyTypeFilter[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setVacancyTypeFilter(item)}
-                  className={`rounded-2xl border px-3 py-2 text-sm ${
-                    vacancyTypeFilter === item
-                      ? "border-violet-600 bg-violet-600 text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {vacancyTypeFilterLabel(item)}
-                </button>
-              ))}
+              {(["all", "job", "part_time", "shift"] as VacancyTypeFilter[]).map(
+                (item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setVacancyTypeFilter(item)}
+                    className={`rounded-2xl border px-3 py-2 text-sm ${
+                      vacancyTypeFilter === item
+                        ? "border-violet-600 bg-violet-600 text-white"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {vacancyTypeFilterLabel(item)}
+                  </button>
+                )
+              )}
             </div>
 
             <div className="mt-3 text-sm text-slate-500">
@@ -1466,7 +1474,9 @@ export default function EmployerDashboardPage() {
                           ? `Дата и время: ${formatShiftTimeLine(selectedVacancy) || "Не указаны"}`
                           : `График: ${selectedVacancy.schedule_text || "Не указан"}`}
                       </div>
-                      <div>Нужен человек: {formatReadyToStart(selectedVacancy.needed_start)}</div>
+                      <div>
+                        Нужен человек: {formatReadyToStart(selectedVacancy.needed_start)}
+                      </div>
                       {selectedVacancy.slots_count ? (
                         <div>Нужно человек: {selectedVacancy.slots_count}</div>
                       ) : null}
@@ -1571,20 +1581,22 @@ export default function EmployerDashboardPage() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {(["new", "in_work", "finished", "all"] as CandidateFilter[]).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setCandidateFilter(item)}
-                    className={`rounded-2xl border px-3 py-2 text-sm ${
-                      candidateFilter === item
-                        ? "border-slate-900 bg-slate-900 text-white"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    {candidateFilterLabel(item)}
-                  </button>
-                ))}
+                {(["new", "in_work", "finished", "all"] as CandidateFilter[]).map(
+                  (item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setCandidateFilter(item)}
+                      className={`rounded-2xl border px-3 py-2 text-sm ${
+                        candidateFilter === item
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {candidateFilterLabel(item)}
+                    </button>
+                  )
+                )}
               </div>
             </div>
 
@@ -1610,9 +1622,13 @@ export default function EmployerDashboardPage() {
                   );
                   const score = match.match_score ?? 0;
                   const phoneHref = normalizePhoneHref(match.candidate.phone);
-                  const telegramHref = normalizeTelegramHref(match.candidate.telegram_username);
+                  const telegramHref = normalizeTelegramHref(
+                    match.candidate.telegram_username
+                  );
                   const initials = getInitials(match.candidate.full_name);
-                  const avatarTone = getCandidateAvatarTone(match.candidate.primary_role);
+                  const avatarTone = getCandidateAvatarTone(
+                    match.candidate.primary_role
+                  );
 
                   return (
                     <div

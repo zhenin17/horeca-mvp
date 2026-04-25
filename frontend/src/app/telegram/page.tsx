@@ -2,15 +2,30 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getTelegramBootstrapUser, prepareTelegramWebApp } from "@/lib/telegram";
+import {
+  apiFetch,
+  apiPostJson,
+  clearAccessToken,
+  setAccessToken,
+} from "@/lib/api";
+import {
+  clearActiveRole,
+  CurrentUserRead,
+  getActiveRole,
+  setActiveRole,
+  syncLegacyIdsFromCurrentUser,
+} from "@/lib/current-user";
+import {
+  getTelegramBootstrapUser,
+  getTelegramInitData,
+  getTelegramTestUserId,
+  isTelegramTestMode,
+  prepareTelegramWebApp,
+} from "@/lib/telegram";
 
-type TelegramAuthResponse = {
-  telegram_user_id: number;
-  telegram_username?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-  candidate_id: number | null;
-  employer_id: number | null;
+type AccessTokenResponse = {
+  access_token: string;
+  current_user: CurrentUserRead;
 };
 
 type RoleChoice = "candidate" | "employer";
@@ -35,23 +50,6 @@ type EmployerForm = {
 };
 
 const CONSENT_STORAGE_KEY = "hubsty_entry_consent_v1";
-
-function getSavedRole(): RoleChoice | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  const savedRole = window.localStorage.getItem("hubsty_active_role");
-  return savedRole === "candidate" || savedRole === "employer" ? savedRole : null;
-}
-
-function resetSavedRole() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.removeItem("hubsty_active_role");
-}
 
 function getConsentAccepted(): boolean {
   if (typeof window === "undefined") {
@@ -115,7 +113,7 @@ export default function TelegramEntryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorText, setErrorText] = useState("");
-  const [telegramUser, setTelegramUser] = useState<TelegramAuthResponse | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [createRole, setCreateRole] = useState<RoleChoice | null>(null);
   const [savedRole, setSavedRole] = useState<RoleChoice | null>(null);
 
@@ -148,35 +146,40 @@ export default function TelegramEntryPage() {
         setErrorText("");
 
         prepareTelegramWebApp();
-        setSavedRole(getSavedRole());
+        setSavedRole(getActiveRole());
         setConsentAccepted(getConsentAccepted());
 
-        const user = getTelegramBootstrapUser();
+        let authData: AccessTokenResponse;
 
-        if (!user) {
+        const initData = getTelegramInitData();
+
+        if (initData) {
+          authData = await apiPostJson<AccessTokenResponse>("/auth/telegram", {
+            init_data: initData,
+          });
+        } else if (isTelegramTestMode()) {
+          authData = await apiPostJson<AccessTokenResponse>("/auth/dev", {
+            telegram_user_id: getTelegramTestUserId(),
+          });
+        } else {
+          const bootstrapUser = getTelegramBootstrapUser();
+
+          if (!bootstrapUser) {
+            throw new Error(
+              "Telegram user не найден. Для теста открой /telegram?tg_test=1"
+            );
+          }
+
           throw new Error(
-            "Telegram user не найден. Для теста открой /telegram?tg_test=1"
+            "Нет Telegram initData. Для реального входа открой через Telegram Mini App, для локального теста используй /telegram?tg_test=1"
           );
         }
 
-        const response = await fetch("/api/telegram/auth", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(user),
-        });
+        setAccessToken(authData.access_token);
+        syncLegacyIdsFromCurrentUser(authData.current_user);
+        setCurrentUser(authData.current_user);
 
-        const text = await response.text();
-        const data = text ? (JSON.parse(text) as TelegramAuthResponse) : null;
-
-        if (!response.ok || !data) {
-          throw new Error("Не удалось выполнить Telegram-вход");
-        }
-
-        setTelegramUser(data);
-
-        const presetName = [data.first_name, data.last_name]
+        const presetName = [authData.current_user.first_name, authData.current_user.last_name]
           .filter(Boolean)
           .join(" ")
           .trim();
@@ -192,6 +195,7 @@ export default function TelegramEntryPage() {
         }));
       } catch (error) {
         console.error(error);
+        clearAccessToken();
 
         if (error instanceof Error) {
           setErrorText(error.message);
@@ -221,13 +225,13 @@ export default function TelegramEntryPage() {
     return false;
   }
 
-  function saveRole(role: RoleChoice, authData?: TelegramAuthResponse) {
+  function saveRole(role: RoleChoice, authUser?: CurrentUserRead) {
     if (typeof window === "undefined") {
       return;
     }
 
-    const data = authData || telegramUser;
-    if (!data) {
+    const user = authUser || currentUser;
+    if (!user) {
       return;
     }
 
@@ -235,44 +239,30 @@ export default function TelegramEntryPage() {
       return;
     }
 
-    window.localStorage.setItem("hubsty_active_role", role);
+    setActiveRole(role);
     setSavedRole(role);
+    syncLegacyIdsFromCurrentUser(user);
 
-    if (role === "candidate" && data.candidate_id) {
-      window.localStorage.setItem("hubsty_candidate_id", String(data.candidate_id));
+    if (role === "candidate" && user.candidate_id) {
       window.location.href = "/candidate/vacancies";
       return;
     }
 
-    if (role === "employer" && data.employer_id) {
-      window.localStorage.setItem("hubsty_employer_id", String(data.employer_id));
-      window.location.href = `/employer/${data.employer_id}`;
+    if (role === "employer" && user.employer_id) {
+      window.location.href = `/employer/${user.employer_id}`;
       return;
     }
   }
 
-  async function refreshTelegramUser() {
-    if (!telegramUser) {
-      return null;
-    }
-
-    const response = await fetch(`/api/telegram/me/${telegramUser.telegram_user_id}`, {
-      cache: "no-store",
-    });
-
-    const text = await response.text();
-    const data = text ? (JSON.parse(text) as TelegramAuthResponse) : null;
-
-    if (!response.ok || !data) {
-      throw new Error("Не удалось обновить Telegram-профиль");
-    }
-
-    setTelegramUser(data);
-    return data;
+  async function refreshCurrentUser() {
+    const me = await apiFetch<CurrentUserRead>("/auth/me");
+    setCurrentUser(me);
+    syncLegacyIdsFromCurrentUser(me);
+    return me;
   }
 
   async function createCandidateProfile() {
-    if (!telegramUser) {
+    if (!currentUser) {
       return;
     }
 
@@ -309,37 +299,22 @@ export default function TelegramEntryPage() {
       setSaving(true);
       setErrorText("");
 
-      const response = await fetch("/api/telegram/create-candidate-profile", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          telegram_user_id: telegramUser.telegram_user_id,
-          full_name: candidateForm.full_name.trim(),
-          phone: candidateForm.phone.trim(),
-          telegram_username: telegramUser.telegram_username || null,
-          city: candidateForm.city.trim(),
-          district: candidateForm.district.trim() || null,
-          primary_role: candidateForm.primary_role.trim(),
-          horeca_experience_months: Number(candidateForm.horeca_experience_months) || 0,
-          ready_to_start: candidateForm.ready_to_start.trim(),
-          expected_income: candidateForm.expected_income.trim() || null,
-        }),
+      await apiPostJson("/telegram/create-candidate-profile", {
+        telegram_user_id: currentUser.telegram_user_id,
+        full_name: candidateForm.full_name.trim(),
+        phone: candidateForm.phone.trim(),
+        telegram_username: currentUser.telegram_username || null,
+        city: candidateForm.city.trim(),
+        district: candidateForm.district.trim() || null,
+        primary_role: candidateForm.primary_role.trim(),
+        horeca_experience_months: Number(candidateForm.horeca_experience_months) || 0,
+        ready_to_start: candidateForm.ready_to_start.trim(),
+        expected_income: candidateForm.expected_income.trim() || null,
       });
 
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось создать профиль кандидата");
-      }
-
-      const refreshed = await refreshTelegramUser();
+      const refreshed = await refreshCurrentUser();
       setCreateRole(null);
-      if (refreshed) {
-        saveRole("candidate", refreshed);
-      }
+      saveRole("candidate", refreshed);
     } catch (error) {
       console.error(error);
       if (error instanceof Error) {
@@ -353,7 +328,7 @@ export default function TelegramEntryPage() {
   }
 
   async function createEmployerProfile() {
-    if (!telegramUser) {
+    if (!currentUser) {
       return;
     }
 
@@ -385,34 +360,19 @@ export default function TelegramEntryPage() {
       setSaving(true);
       setErrorText("");
 
-      const response = await fetch("/api/telegram/create-employer-profile", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          telegram_user_id: telegramUser.telegram_user_id,
-          company_name: employerForm.company_name.trim(),
-          contact_name: employerForm.contact_name.trim(),
-          phone: employerForm.phone.trim(),
-          telegram_username: telegramUser.telegram_username || null,
-          city: employerForm.city.trim(),
-          website: employerForm.website.trim() || null,
-        }),
+      await apiPostJson("/telegram/create-employer-profile", {
+        telegram_user_id: currentUser.telegram_user_id,
+        company_name: employerForm.company_name.trim(),
+        contact_name: employerForm.contact_name.trim(),
+        phone: employerForm.phone.trim(),
+        telegram_username: currentUser.telegram_username || null,
+        city: employerForm.city.trim(),
+        website: employerForm.website.trim() || null,
       });
 
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось создать профиль работодателя");
-      }
-
-      const refreshed = await refreshTelegramUser();
+      const refreshed = await refreshCurrentUser();
       setCreateRole(null);
-      if (refreshed) {
-        saveRole("employer", refreshed);
-      }
+      saveRole("employer", refreshed);
     } catch (error) {
       console.error(error);
       if (error instanceof Error) {
@@ -426,23 +386,23 @@ export default function TelegramEntryPage() {
   }
 
   const userDisplayName = useMemo(() => {
-    if (!telegramUser) {
+    if (!currentUser) {
       return "Telegram пользователь";
     }
 
-    const fullName = [telegramUser.first_name, telegramUser.last_name]
+    const fullName = [currentUser.first_name, currentUser.last_name]
       .filter(Boolean)
       .join(" ")
       .trim();
 
-    return fullName || telegramUser.telegram_username || "Telegram пользователь";
-  }, [telegramUser]);
+    return fullName || currentUser.telegram_username || "Telegram пользователь";
+  }, [currentUser]);
 
   if (loading) {
     return <main className="px-4 py-6">Подключаем Telegram...</main>;
   }
 
-  if (errorText && !telegramUser) {
+  if (errorText && !currentUser) {
     return (
       <main className="space-y-6 px-4 py-6">
         <section className="rounded-3xl border border-red-200 bg-red-50 p-5">
@@ -455,7 +415,7 @@ export default function TelegramEntryPage() {
     );
   }
 
-  if (!telegramUser) {
+  if (!currentUser) {
     return (
       <main className="px-4 py-6">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
@@ -465,8 +425,8 @@ export default function TelegramEntryPage() {
     );
   }
 
-  const hasCandidate = Boolean(telegramUser.candidate_id);
-  const hasEmployer = Boolean(telegramUser.employer_id);
+  const hasCandidate = Boolean(currentUser.candidate_id);
+  const hasEmployer = Boolean(currentUser.employer_id);
   const canContinue = consentAccepted || consentChecked;
 
   return (
@@ -515,7 +475,7 @@ export default function TelegramEntryPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    resetSavedRole();
+                    clearActiveRole();
                     setSavedRole(null);
                     setCreateRole(null);
                     setErrorText("");

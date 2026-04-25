@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { normalizeMediaUrl } from "@/lib/api";
-import { getCurrentCandidateId } from "@/lib/current-user";
+import { apiFetch, apiPostJson, normalizeMediaUrl } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateItem = {
   id: number;
@@ -66,20 +66,6 @@ type ApplyResult = {
   match_score: number;
   match_status: string;
 };
-
-async function readJsonSafe<T>(response: Response): Promise<T | null> {
-  const text = await response.text();
-
-  if (!text.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
 
 function isTelegramMiniApp() {
   if (typeof window === "undefined") {
@@ -498,32 +484,19 @@ export default function CandidateVacancyDetailsPage() {
         throw new Error("Некорректный идентификатор вакансии");
       }
 
-      const candidateId = getCurrentCandidateId();
-
-      const [candidateResponse, vacancyResponse, matchesResponse] =
-        await Promise.all([
-          fetch(`/api/candidates/${candidateId}`, { cache: "no-store" }),
-          fetch(`/api/vacancies/${vacancyId}`, { cache: "no-store" }),
-          fetch(`/api/matches/?candidate_id=${candidateId}`, {
-            cache: "no-store",
-          }),
-        ]);
-
-      if (!candidateResponse.ok) {
-        throw new Error("Не удалось загрузить данные кандидата");
+      const me = await apiFetch<CurrentUserRead>("/auth/me");
+      if (!me.is_candidate || !me.candidate_id) {
+        throw new Error("Профиль кандидата не найден");
       }
 
-      if (!vacancyResponse.ok) {
-        throw new Error("Не удалось загрузить вакансию");
-      }
+      const [candidateData, matchesData, allVacancies] = await Promise.all([
+        apiFetch<CandidateItem>("/me/candidate"),
+        apiFetch<MatchItem[]>("/me/candidate/matches"),
+        apiFetch<VacancyItem[]>("/me/candidate/vacancies"),
+      ]);
 
-      if (!matchesResponse.ok) {
-        throw new Error("Не удалось загрузить отклики кандидата");
-      }
-
-      const candidateData = await readJsonSafe<CandidateItem>(candidateResponse);
-      const vacancyData = await readJsonSafe<VacancyItem>(vacancyResponse);
-      const matchesData = await readJsonSafe<MatchItem[]>(matchesResponse);
+      const vacancyData =
+        (allVacancies || []).find((item) => item.id === vacancyId) || null;
 
       if (!candidateData) {
         throw new Error("Кандидат не найден");
@@ -594,53 +567,11 @@ export default function CandidateVacancyDetailsPage() {
       setErrorText("");
       setSuccessText("");
 
-      const response = await fetch(`/api/vacancies/${vacancy.id}/apply`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          candidate_id: candidate.id,
-          vacancy_id: vacancy.id,
-          comment: null,
-        }),
+      await apiPostJson<ApplyResult>(`/vacancies/${vacancy.id}/apply`, {
+        candidate_id: candidate.id,
+        vacancy_id: vacancy.id,
+        comment: null,
       });
-
-      const text = await response.text();
-      let data: ApplyResult | { detail?: string } | null = null;
-
-      if (text.trim()) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = null;
-        }
-      }
-
-      if (!response.ok) {
-        const detail =
-          (data as { detail?: string } | null)?.detail ||
-          `Не удалось откликнуться (${response.status})`;
-
-        if (detail === "Candidate already applied to this vacancy") {
-          setExistingMatch({
-            id: -1,
-            candidate_id: candidate.id,
-            employer_id: vacancy.employer_id,
-            vacancy_id: vacancy.id,
-            match_score: null,
-            status: "shortlist",
-            comment: null,
-          });
-
-          setSuccessText(
-            "Вы уже откликнулись на эту вакансию. Проверьте текущий статус в разделе «Мои отклики»."
-          );
-          return;
-        }
-
-        throw new Error(detail);
-      }
 
       setSuccessText(
         "Отклик отправлен. Теперь вы можете следить за статусом в разделе «Мои отклики»."
@@ -655,6 +586,14 @@ export default function CandidateVacancyDetailsPage() {
       console.error(error);
 
       if (error instanceof Error) {
+        if (error.message === "Candidate already applied to this vacancy") {
+          setSuccessText(
+            "Вы уже откликнулись на эту вакансию. Проверьте текущий статус в разделе «Мои отклики»."
+          );
+          await loadData();
+          return;
+        }
+
         setErrorText(error.message);
       } else {
         setErrorText("Не удалось откликнуться на вакансию");

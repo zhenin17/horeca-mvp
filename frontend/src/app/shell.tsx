@@ -2,28 +2,24 @@
 
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
+import { getActiveRole } from "@/lib/current-user";
 import { isTelegramWebApp } from "@/lib/telegram";
 
 type Props = {
   children: ReactNode;
 };
 
-type ActiveRole = "candidate" | "employer" | null;
-
 export default function ClientShell({ children }: Props) {
   const [isTelegram, setIsTelegram] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [, setActiveRole] = useState<ActiveRole>(null);
+  const [, setActiveRole] = useState(getActiveRole());
 
   useEffect(() => {
     const telegramMode = isTelegramWebApp();
     setIsTelegram(telegramMode);
 
-    if (telegramMode && typeof window !== "undefined") {
-      const savedRole = window.localStorage.getItem("hubsty_active_role");
-      if (savedRole === "candidate" || savedRole === "employer") {
-        setActiveRole(savedRole);
-      }
+    if (telegramMode) {
+      setActiveRole(getActiveRole());
     }
 
     setMounted(true);

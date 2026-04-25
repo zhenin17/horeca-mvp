@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.dependencies.auth import get_current_user, require_admin
 from app.models.funnel_event import FunnelEvent
 from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
@@ -11,6 +12,7 @@ from app.schemas.vacancy_candidate_match import (
     VacancyCandidateMatchUpdate,
     VacancyCandidateMatchWithCandidateRead,
 )
+from app.services.auth import CurrentUserContext
 
 router = APIRouter(prefix="/matches", tags=["Matches"])
 
@@ -102,8 +104,61 @@ def create_shift_event_if_needed(
     db.add(event)
 
 
+def get_match_or_404(match_id: int, db: Session) -> VacancyCandidateMatch:
+    match = db.query(VacancyCandidateMatch).filter(VacancyCandidateMatch.id == match_id).first()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return match
+
+
+def require_match_admin_or_employer_owner(
+    match: VacancyCandidateMatch,
+    current_user: CurrentUserContext,
+) -> None:
+    if current_user.is_admin:
+        return
+
+    if not current_user.is_employer or current_user.employer_id is None:
+        raise HTTPException(status_code=403, detail="Employer or admin access required")
+
+    if current_user.employer_id != match.employer_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
+def require_match_admin_or_candidate_owner(
+    match: VacancyCandidateMatch,
+    current_user: CurrentUserContext,
+) -> None:
+    if current_user.is_admin:
+        return
+
+    if not current_user.is_candidate or current_user.candidate_id is None:
+        raise HTTPException(status_code=403, detail="Candidate or admin access required")
+
+    if current_user.candidate_id != match.candidate_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
+def require_match_admin_or_participant(
+    match: VacancyCandidateMatch,
+    current_user: CurrentUserContext,
+) -> None:
+    if current_user.is_admin:
+        return
+
+    is_candidate_owner = current_user.is_candidate and current_user.candidate_id == match.candidate_id
+    is_employer_owner = current_user.is_employer and current_user.employer_id == match.employer_id
+
+    if not is_candidate_owner and not is_employer_owner:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+
 @router.post("/", response_model=VacancyCandidateMatchRead)
-def create_match(payload: VacancyCandidateMatchCreate, db: Session = Depends(get_db)):
+def create_match(
+    payload: VacancyCandidateMatchCreate,
+    current_user: CurrentUserContext = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     match = VacancyCandidateMatch(
         candidate_id=payload.candidate_id,
         employer_id=payload.employer_id,
@@ -121,7 +176,7 @@ def create_match(payload: VacancyCandidateMatchCreate, db: Session = Depends(get
         employer_id=match.employer_id,
         vacancy_id=match.vacancy_id,
         event_type="match_created",
-        event_source="api",
+        event_source="admin_api" if current_user.is_admin else "api",
         comment=f"match_id={match.id}; score={match.match_score or 0}",
     )
     db.add(event)
@@ -139,6 +194,7 @@ def list_matches(
     candidate_id: int | None = None,
     employer_id: int | None = None,
     status: str | None = None,
+    current_user: CurrentUserContext = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     query = db.query(VacancyCandidateMatch)
@@ -159,11 +215,11 @@ def list_matches(
 def update_match(
     match_id: int,
     payload: VacancyCandidateMatchUpdate,
+    current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    match = db.query(VacancyCandidateMatch).filter(VacancyCandidateMatch.id == match_id).first()
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
+    match = get_match_or_404(match_id, db)
+    require_match_admin_or_employer_owner(match, current_user)
 
     old_status = match.status
     shift_match = is_shift_match(db, match)
@@ -197,11 +253,20 @@ def update_match(
 def apply_status_transition(
     match_id: int,
     new_status: str,
+    current_user: CurrentUserContext,
     db: Session,
+    access_mode: str,
 ) -> VacancyCandidateMatch:
-    match = db.query(VacancyCandidateMatch).filter(VacancyCandidateMatch.id == match_id).first()
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
+    match = get_match_or_404(match_id, db)
+
+    if access_mode == "employer_admin":
+        require_match_admin_or_employer_owner(match, current_user)
+    elif access_mode == "candidate_admin":
+        require_match_admin_or_candidate_owner(match, current_user)
+    elif access_mode == "participant_admin":
+        require_match_admin_or_participant(match, current_user)
+    else:
+        raise HTTPException(status_code=500, detail="Invalid access policy")
 
     old_status = match.status
     shift_match = is_shift_match(db, match)
@@ -225,60 +290,103 @@ def apply_status_transition(
 
 
 @router.post("/{match_id}/send", response_model=VacancyCandidateMatchRead)
-def send_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "sent", db)
+def send_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "sent", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/view", response_model=VacancyCandidateMatchRead)
-def view_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "viewed", db)
+def view_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "viewed", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/invite", response_model=VacancyCandidateMatchRead)
-def invite_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "invited", db)
+def invite_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "invited", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/confirm", response_model=VacancyCandidateMatchRead)
-def confirm_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "confirmed", db)
+def confirm_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "confirmed", current_user, db, "participant_admin")
 
 
 @router.post("/{match_id}/worked", response_model=VacancyCandidateMatchRead)
-def worked_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "worked", db)
+def worked_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "worked", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/cancel", response_model=VacancyCandidateMatchRead)
-def cancel_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "cancelled", db)
+def cancel_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "cancelled", current_user, db, "participant_admin")
 
 
 @router.post("/{match_id}/interview", response_model=VacancyCandidateMatchRead)
-def interview_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "interviewed", db)
+def interview_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "interviewed", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/hire", response_model=VacancyCandidateMatchRead)
-def hire_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "hired", db)
+def hire_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "hired", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/reject", response_model=VacancyCandidateMatchRead)
-def reject_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "rejected", db)
+def reject_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "rejected", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/no-show", response_model=VacancyCandidateMatchRead)
-def no_show_match(match_id: int, db: Session = Depends(get_db)):
-    return apply_status_transition(match_id, "no_show", db)
+def no_show_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return apply_status_transition(match_id, "no_show", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/reopen", response_model=VacancyCandidateMatchRead)
-def reopen_match(match_id: int, db: Session = Depends(get_db)):
-    match = db.query(VacancyCandidateMatch).filter(VacancyCandidateMatch.id == match_id).first()
-    if not match:
-        raise HTTPException(status_code=404, detail="Match not found")
+def reopen_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    match = get_match_or_404(match_id, db)
+    require_match_admin_or_employer_owner(match, current_user)
 
     old_status = match.status
 

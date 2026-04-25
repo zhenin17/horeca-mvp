@@ -1,54 +1,75 @@
-export async function apiFetch<T>(path: string): Promise<T> {
+const ACCESS_TOKEN_STORAGE_KEY = "hubsty_access_token";
+
+function buildApiUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const response = await fetch(`/api${normalizedPath}`, {
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    let message = `API request failed: ${response.status}`;
-
-    try {
-      const data = (await response.json()) as { detail?: string; message?: string };
-      message = data.detail || data.message || message;
-    } catch {
-      // ignore json parse errors
-    }
-
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<T>;
+  return `/api${normalizedPath}`;
 }
 
-export async function apiPostFormData<T>(
-  path: string,
-  formData: FormData
-): Promise<T> {
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const response = await fetch(`/api${normalizedPath}`, {
-    method: "POST",
-    body: formData,
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
+export function setAccessToken(token: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+}
+
+export function clearAccessToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
+async function readErrorMessage(response: Response) {
+  let message = `API request failed: ${response.status}`;
+
+  try {
+    const text = await response.text();
+
+    if (!text.trim()) {
+      return message;
+    }
+
+    try {
+      const data = JSON.parse(text) as { detail?: string; message?: string };
+      return data.detail || data.message || text || message;
+    } catch {
+      return text;
+    }
+  } catch {
+    return message;
+  }
+}
+
+async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  const token = getAccessToken();
+
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(buildApiUrl(path), {
+    cache: "no-store",
+    ...init,
+    headers,
   });
 
   if (!response.ok) {
-    let message = `API request failed: ${response.status}`;
-
-    try {
-      const text = await response.text();
-
-      if (text.trim()) {
-        try {
-          const data = JSON.parse(text) as { detail?: string; message?: string };
-          message = data.detail || data.message || text || message;
-        } catch {
-          message = text;
-        }
-      }
-    } catch {
-      // ignore body read errors
+    if (response.status === 401) {
+      clearAccessToken();
     }
 
-    throw new Error(message);
+    throw new Error(await readErrorMessage(response));
   }
 
   const text = await response.text();
@@ -62,6 +83,42 @@ export async function apiPostFormData<T>(
   } catch {
     return null as T;
   }
+}
+
+export async function apiFetch<T>(path: string): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "GET",
+  });
+}
+
+export async function apiPostJson<T>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiPatchJson<T>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function apiPostFormData<T>(
+  path: string,
+  formData: FormData
+): Promise<T> {
+  return apiRequest<T>(path, {
+    method: "POST",
+    body: formData,
+  });
 }
 
 export async function uploadVacancyPhoto<T = unknown>(
@@ -83,6 +140,7 @@ export async function uploadCandidatePhoto<T = unknown>(
 
   return apiPostFormData<T>(`/candidates/${candidateId}/photos/upload`, formData);
 }
+
 export function normalizeMediaUrl(url?: string | null): string | null {
   if (!url) {
     return null;

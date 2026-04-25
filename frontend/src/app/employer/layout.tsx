@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { getCurrentEmployerId } from "@/lib/current-user";
+
+type CurrentUserRead = {
+  telegram_user_id: number;
+  telegram_username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  candidate_id: number | null;
+  employer_id: number | null;
+  is_candidate: boolean;
+  is_employer: boolean;
+  is_admin: boolean;
+};
 
 function topNavClass(isActive: boolean) {
   return isActive
@@ -45,9 +56,29 @@ export default function EmployerLayout({
   const [currentEmployerId, setCurrentEmployerId] = useState<number | null>(null);
 
   useEffect(() => {
-    setMounted(true);
-    setIsTelegram(detectTelegramWebApp());
-    setCurrentEmployerId(getCurrentEmployerId());
+    async function bootstrap() {
+      try {
+        setMounted(true);
+        setIsTelegram(detectTelegramWebApp());
+
+        const response = await fetch("/api/auth/me", {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          setCurrentEmployerId(null);
+          return;
+        }
+
+        const me = (await response.json()) as CurrentUserRead;
+        setCurrentEmployerId(me.employer_id ?? null);
+      } catch (error) {
+        console.error(error);
+        setCurrentEmployerId(null);
+      }
+    }
+
+    void bootstrap();
   }, []);
 
   const employerDashboardHref = currentEmployerId
@@ -57,6 +88,8 @@ export default function EmployerLayout({
   const createVacancyHref = currentEmployerId
     ? `/employer/${currentEmployerId}/create-vacancies`
     : "/employer/start";
+
+  const onboardingHref = currentEmployerId ? employerDashboardHref : "/employer/onboarding";
 
   const isStart = pathname === "/employer/start";
   const isOnboarding = pathname.startsWith("/employer/onboarding");
@@ -92,7 +125,7 @@ export default function EmployerLayout({
                 Создать
               </Link>
 
-              <Link href="/employer/onboarding" className={topNavClass(isOnboarding)}>
+              <Link href={onboardingHref} className={topNavClass(isOnboarding)}>
                 Анкета
               </Link>
 
@@ -133,7 +166,7 @@ export default function EmployerLayout({
                 Создать
               </Link>
 
-              <Link href="/employer/onboarding" className={bottomNavClass(isOnboarding)}>
+              <Link href={onboardingHref} className={bottomNavClass(isOnboarding)}>
                 Анкета
               </Link>
             </nav>

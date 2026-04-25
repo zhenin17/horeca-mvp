@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getCurrentCandidateId } from "@/lib/current-user";
-import { normalizeMediaUrl, uploadCandidatePhoto } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
+import { apiFetch, normalizeMediaUrl, uploadCandidatePhoto } from "@/lib/api";
 import {
   CITY_OPTIONS,
   ROLE_OPTIONS,
@@ -30,6 +30,7 @@ type CandidateForm = {
 };
 
 type LoadCandidateResponse = {
+  id: number;
   full_name: string;
   phone: string;
   telegram_username?: string | null;
@@ -106,6 +107,7 @@ export default function CandidateOnboardingPage() {
   const [isTelegram, setIsTelegram] = useState(false);
   const [loadedCandidate, setLoadedCandidate] =
     useState<LoadCandidateResponse | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
 
   const [selectedPhotoFile, setSelectedPhotoFile] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
@@ -121,17 +123,15 @@ export default function CandidateOnboardingPage() {
         setMessage("");
         setMessageType("");
 
-        const candidateId = getCurrentCandidateId();
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
 
-        const response = await fetch(`/api/candidates/${candidateId}`, {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error("Не удалось загрузить анкету кандидата");
+        if (!me.is_candidate || !me.candidate_id) {
+          throw new Error("Профиль кандидата не найден");
         }
 
-        const data = (await response.json()) as LoadCandidateResponse;
+        const data = await apiFetch<LoadCandidateResponse>("/me/candidate");
+
+        setCurrentUser(me);
         setLoadedCandidate(data);
 
         setForm({
@@ -313,14 +313,17 @@ export default function CandidateOnboardingPage() {
       return;
     }
 
+    if (!currentUser?.candidate_id) {
+      setError("Профиль кандидата не найден");
+      return;
+    }
+
     setSaving(true);
     clearMessage();
     setPhotoErrorText("");
 
     try {
-      const candidateId = getCurrentCandidateId();
-
-      const response = await fetch(`/api/candidates/${candidateId}`, {
+      const response = await fetch("/api/me/candidate", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -346,7 +349,7 @@ export default function CandidateOnboardingPage() {
 
       if (selectedPhotoFile) {
         try {
-          await uploadCandidatePhoto(candidateId, selectedPhotoFile);
+          await uploadCandidatePhoto(currentUser.candidate_id, selectedPhotoFile);
         } catch (photoError) {
           console.error(photoError);
 

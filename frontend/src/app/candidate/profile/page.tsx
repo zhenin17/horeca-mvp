@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   apiFetch,
+  apiPatchJson,
+  apiPostJson,
   normalizeMediaUrl,
   uploadCandidatePhoto,
 } from "@/lib/api";
 import { formatReadyToStart } from "@/lib/format";
 import type { CandidateDashboard, CandidateProfileDetail } from "@/lib/types";
-import { getCurrentCandidateId } from "@/lib/current-user";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateProfile = CandidateProfileDetail;
 
@@ -324,27 +326,18 @@ export default function CandidateProfilePage() {
       setMessage("");
       setAvailabilityErrorText("");
 
-      const candidateId = getCurrentCandidateId();
+      const me = await apiFetch<CurrentUserRead>("/auth/me");
+      if (!me.is_candidate || !me.candidate_id) {
+        throw new Error("Профиль кандидата не найден");
+      }
 
-      const [dashboardData, candidateData, availabilityResponse, reliabilityResponse] =
+      const [dashboardData, candidateData, availabilityData, reliabilityData] =
         await Promise.all([
-          apiFetch<CandidateDashboard>(`/candidates/${candidateId}/dashboard`),
-          apiFetch<CandidateProfile>(`/candidates/${candidateId}`),
-          fetch(`/api/candidates/${candidateId}/availability`, { cache: "no-store" }),
-          fetch(`/api/candidates/${candidateId}/reliability`, { cache: "no-store" }),
+          apiFetch<CandidateDashboard>("/me/candidate/dashboard"),
+          apiFetch<CandidateProfile>("/me/candidate"),
+          apiFetch<CandidateAvailabilityItem[]>("/me/candidate/availability"),
+          apiFetch<CandidateReliability>("/me/candidate/reliability"),
         ]);
-
-      let availabilityData: CandidateAvailabilityItem[] = [];
-      if (availabilityResponse.ok) {
-        availabilityData =
-          ((await availabilityResponse.json()) as CandidateAvailabilityItem[]) || [];
-      }
-
-      let reliabilityData: CandidateReliability | null = null;
-      if (reliabilityResponse.ok) {
-        reliabilityData =
-          ((await reliabilityResponse.json()) as CandidateReliability) || null;
-      }
 
       setDashboard(dashboardData);
       setCandidate(candidateData);
@@ -353,7 +346,7 @@ export default function CandidateProfilePage() {
           a.available_date.localeCompare(b.available_date)
         )
       );
-      setReliability(reliabilityData);
+      setReliability(reliabilityData || null);
     } catch (error) {
       console.error(error);
       if (error instanceof Error) {
@@ -371,16 +364,7 @@ export default function CandidateProfilePage() {
       setAvailabilityLoading(true);
       setAvailabilityErrorText("");
 
-      const candidateId = getCurrentCandidateId();
-      const response = await fetch(`/api/candidates/${candidateId}/availability`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error("Не удалось загрузить доступность");
-      }
-
-      const data = (await response.json()) as CandidateAvailabilityItem[];
+      const data = await apiFetch<CandidateAvailabilityItem[]>("/me/candidate/availability");
       setAvailability(
         [...data].sort((a, b) => a.available_date.localeCompare(b.available_date))
       );
@@ -398,16 +382,7 @@ export default function CandidateProfilePage() {
 
   async function loadReliability() {
     try {
-      const candidateId = getCurrentCandidateId();
-      const response = await fetch(`/api/candidates/${candidateId}/reliability`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error("Не удалось загрузить надежность");
-      }
-
-      const data = (await response.json()) as CandidateReliability;
+      const data = await apiFetch<CandidateReliability>("/me/candidate/reliability");
       setReliability(data || null);
     } catch (error) {
       console.error(error);
@@ -434,29 +409,17 @@ export default function CandidateProfilePage() {
     setMessage("");
 
     try {
-      const response = await fetch(`/api/candidates/${candidate.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          full_name: candidate.full_name,
-          phone: candidate.phone,
-          telegram_username: candidate.telegram_username || null,
-          city: candidate.city,
-          district: candidate.district || null,
-          primary_role: candidate.primary_role,
-          horeca_experience_months: candidate.horeca_experience_months,
-          ready_to_start: value,
-          expected_income: candidate.expected_income || null,
-        }),
+      await apiPatchJson("/candidates/" + candidate.id, {
+        full_name: candidate.full_name,
+        phone: candidate.phone,
+        telegram_username: candidate.telegram_username || null,
+        city: candidate.city,
+        district: candidate.district || null,
+        primary_role: candidate.primary_role,
+        horeca_experience_months: candidate.horeca_experience_months,
+        ready_to_start: value,
+        expected_income: candidate.expected_income || null,
       });
-
-      const data = (await response.json()) as { detail?: string };
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Не удалось обновить готовность");
-      }
 
       setMessage("Готовность обновлена");
       await loadData();
@@ -559,25 +522,12 @@ export default function CandidateProfilePage() {
       setAvailabilityErrorText("");
       setMessage("");
 
-      const response = await fetch(`/api/candidates/${candidate.id}/availability`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          available_date: availabilityForm.available_date,
-          slot_type: availabilityForm.slot_type,
-          start_time: availabilityForm.start_time.trim() || null,
-          end_time: availabilityForm.end_time.trim() || null,
-        }),
+      await apiPostJson("/me/candidate/availability", {
+        available_date: availabilityForm.available_date,
+        slot_type: availabilityForm.slot_type,
+        start_time: availabilityForm.start_time.trim() || null,
+        end_time: availabilityForm.end_time.trim() || null,
       });
-
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось добавить доступность");
-      }
 
       setAvailabilityForm({
         available_date: "",
@@ -614,6 +564,17 @@ export default function CandidateProfilePage() {
         `/api/candidates/${candidate.id}/availability/${availabilityId}`,
         {
           method: "DELETE",
+          headers: (() => {
+            const token = typeof window !== "undefined"
+              ? window.localStorage.getItem("hubsty_access_token")
+              : null;
+
+            return token
+              ? {
+                  Authorization: `Bearer ${token}`,
+                }
+              : {};
+          })(),
         }
       );
 

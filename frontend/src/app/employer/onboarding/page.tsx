@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type EmployerForm = {
   company_name: string;
@@ -15,6 +16,16 @@ type EmployerForm = {
 
 type FieldErrors = Partial<Record<keyof EmployerForm, string>>;
 
+type EmployerRead = {
+  id: number;
+  company_name: string;
+  contact_name: string;
+  phone: string;
+  telegram_username?: string | null;
+  city: string;
+  website?: string | null;
+};
+
 function normalizeTelegramUsername(value: string) {
   return value.trim().replace(/^@/, "");
 }
@@ -25,10 +36,7 @@ function normalizeWebsite(value: string) {
     return "";
   }
 
-  if (
-    trimmed.startsWith("http://") ||
-    trimmed.startsWith("https://")
-  ) {
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
   }
 
@@ -57,8 +65,19 @@ function validateForm(form: EmployerForm): FieldErrors {
   return errors;
 }
 
+function inputClass(hasError?: boolean) {
+  return `w-full rounded-2xl border px-4 py-3 text-base outline-none transition ${
+    hasError
+      ? "border-red-300 bg-red-50 focus:border-red-400"
+      : "border-slate-300 bg-white focus:border-slate-900"
+  }`;
+}
+
 export default function EmployerOnboardingPage() {
   const router = useRouter();
+
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
+  const [bootLoading, setBootLoading] = useState(true);
 
   const [form, setForm] = useState<EmployerForm>({
     company_name: "",
@@ -73,6 +92,50 @@ export default function EmployerOnboardingPage() {
   const [errorText, setErrorText] = useState("");
   const [successText, setSuccessText] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function bootstrap() {
+      try {
+        setBootLoading(true);
+        setErrorText("");
+
+        const meResponse = await fetch("/api/auth/me", {
+          cache: "no-store",
+        });
+
+        if (!meResponse.ok) {
+          throw new Error("Не удалось загрузить текущего пользователя");
+        }
+
+        const me = (await meResponse.json()) as CurrentUserRead;
+        setCurrentUser(me);
+
+        if (me.is_employer && me.employer_id) {
+          router.replace(`/employer/${me.employer_id}`);
+          return;
+        }
+
+        const presetName = [me.first_name, me.last_name].filter(Boolean).join(" ").trim();
+
+        setForm((prev) => ({
+          ...prev,
+          contact_name: prev.contact_name || presetName,
+          telegram_username: prev.telegram_username || (me.telegram_username ?? ""),
+        }));
+      } catch (error) {
+        console.error(error);
+        if (error instanceof Error) {
+          setErrorText(error.message);
+        } else {
+          setErrorText("Не удалось открыть анкету работодателя");
+        }
+      } finally {
+        setBootLoading(false);
+      }
+    }
+
+    void bootstrap();
+  }, [router]);
 
   function updateField<K extends keyof EmployerForm>(key: K, value: EmployerForm[K]) {
     setForm((prev) => ({
@@ -113,7 +176,7 @@ export default function EmployerOnboardingPage() {
         website: normalizeWebsite(form.website) || null,
       };
 
-      const response = await fetch("/api/employers", {
+      const response = await fetch("/api/me/employer", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -122,20 +185,20 @@ export default function EmployerOnboardingPage() {
       });
 
       const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
+      const data = text ? (JSON.parse(text) as EmployerRead | { detail?: string }) : null;
 
       if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось создать работодателя");
+        throw new Error(
+          (data as { detail?: string } | null)?.detail ||
+            "Не удалось создать профиль работодателя"
+        );
       }
 
-      setSuccessText("Работодатель сохранен");
+      const employer = data as EmployerRead;
+      setSuccessText("Профиль работодателя сохранен");
 
-      if (typeof window !== "undefined" && data?.id) {
-        window.localStorage.setItem("hubsty_employer_id", String(data.id));
-      }
-      
       setTimeout(() => {
-        router.push(`/employer/${data.id}/create-vacancies`);
+        router.push(`/employer/${employer.id}/create-vacancies`);
       }, 700);
     } catch (error) {
       console.error(error);
@@ -149,49 +212,75 @@ export default function EmployerOnboardingPage() {
     }
   }
 
+  if (bootLoading) {
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          Загрузка...
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="space-y-6 px-4 py-6">
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-500">Работодатель</p>
-            <h1 className="mt-2 text-2xl font-semibold">Заполнить данные компании</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Укажи базовую информацию о компании. Сайт можно добавить позже, он не обязателен.
-            </p>
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="bg-gradient-to-br from-violet-50 via-white to-white p-5 md:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="max-w-2xl">
+              <p className="text-sm font-medium text-slate-500">Работодатель</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+                Заполнить данные компании
+              </h1>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Укажи базовую информацию о компании. Сайт можно добавить позже, он не обязателен.
+              </p>
+            </div>
+
+            <Link
+              href="/employer/start"
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Назад
+            </Link>
           </div>
 
-          <Link
-            href="/employer/start"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
-          >
-            Назад
-          </Link>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Что дальше
+            </div>
+
+            <div className="mt-2 text-lg font-semibold text-slate-900">
+              Сначала профиль работодателя, потом создание первой вакансии
+            </div>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              После сохранения вы сразу перейдете к созданию вакансии.
+            </p>
+          </div>
         </div>
       </section>
 
       {errorText ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           {errorText}
         </div>
       ) : null}
 
       {successText ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
           {successText}
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium">Компания *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Компания *</label>
             <input
               value={form.company_name}
               onChange={(e) => updateField("company_name", e.target.value)}
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.company_name ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.company_name))}
               placeholder="Например, Coffee Stories"
             />
             {fieldErrors.company_name ? (
@@ -200,13 +289,11 @@ export default function EmployerOnboardingPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Контактное лицо *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Контактное лицо *</label>
             <input
               value={form.contact_name}
               onChange={(e) => updateField("contact_name", e.target.value)}
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.contact_name ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.contact_name))}
               placeholder="Например, Анна"
             />
             {fieldErrors.contact_name ? (
@@ -215,13 +302,11 @@ export default function EmployerOnboardingPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Телефон *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Телефон *</label>
             <input
               value={form.phone}
               onChange={(e) => updateField("phone", e.target.value)}
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.phone ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.phone))}
               placeholder="+79990000000"
             />
             {fieldErrors.phone ? (
@@ -230,23 +315,21 @@ export default function EmployerOnboardingPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Telegram username</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Telegram username</label>
             <input
               value={form.telegram_username}
               onChange={(e) => updateField("telegram_username", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
               placeholder="@anna_hr"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Город *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Город *</label>
             <input
               value={form.city}
               onChange={(e) => updateField("city", e.target.value)}
-              className={`w-full rounded-xl border px-3 py-2 outline-none ${
-                fieldErrors.city ? "border-red-300 bg-red-50" : "border-slate-300"
-              }`}
+              className={inputClass(Boolean(fieldErrors.city))}
               placeholder="Санкт-Петербург"
             />
             {fieldErrors.city ? (
@@ -255,16 +338,14 @@ export default function EmployerOnboardingPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium">Сайт компании</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Сайт компании</label>
             <input
               value={form.website}
               onChange={(e) => updateField("website", e.target.value)}
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none"
+              className={inputClass()}
               placeholder="Например, coffeestories.ru"
             />
-            <div className="mt-1 text-xs text-slate-500">
-              Необязательное поле
-            </div>
+            <div className="mt-1 text-xs text-slate-500">Необязательное поле</div>
           </div>
         </div>
 
@@ -273,14 +354,14 @@ export default function EmployerOnboardingPage() {
             type="button"
             onClick={() => void saveEmployer()}
             disabled={saving}
-            className="rounded-xl border border-slate-900 bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-2xl border border-slate-900 bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? "Сохраняем..." : "Продолжить"}
           </button>
 
           <Link
             href="/employer/start"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Отмена
           </Link>

@@ -89,6 +89,12 @@ export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp ?? null;
 }
 
+export function getTelegramInitData(): string | null {
+  const webApp = getTelegramWebApp();
+  const initData = webApp?.initData?.trim();
+  return initData ? initData : null;
+}
+
 export function hasTelegramUserContext(): boolean {
   const webApp = getTelegramWebApp();
 
@@ -117,6 +123,29 @@ export function prepareTelegramWebApp() {
   webApp.expand?.();
 }
 
+export function isTelegramTestMode(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  return params.get("tg_test") === "1";
+}
+
+export function getTelegramTestUserId(): number | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const parsedId = Number(params.get("tg_user_id"));
+  if (Number.isFinite(parsedId) && parsedId > 0) {
+    return parsedId;
+  }
+
+  return 123456789;
+}
+
 export function getTelegramBootstrapUser(): TelegramBootstrapUser | null {
   if (typeof window === "undefined") {
     return null;
@@ -133,14 +162,8 @@ export function getTelegramBootstrapUser(): TelegramBootstrapUser | null {
     };
   }
 
-  const params = new URLSearchParams(window.location.search);
-  const testMode = params.get("tg_test");
-  const testUserId = params.get("tg_user_id");
-
-  if (testMode === "1") {
-    const parsedId = Number(testUserId);
-    const telegramUserId =
-      Number.isFinite(parsedId) && parsedId > 0 ? parsedId : 123456789;
+  if (isTelegramTestMode()) {
+    const telegramUserId = getTelegramTestUserId() ?? 123456789;
 
     return {
       telegram_user_id: telegramUserId,
