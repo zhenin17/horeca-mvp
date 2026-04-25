@@ -547,28 +547,30 @@ export default function TelegramEntryPage() {
                   className="mt-1 h-4 w-4 rounded border-slate-300"
                 />
                 <span className="text-sm leading-6 text-slate-600">
-                  Нажимая кнопку продолжения, я принимаю{" "}
+                  Мне исполнилось 18 лет. Я принимаю{" "}
                   <Link
                     href="/about?from=/telegram&doc=terms_of_use"
                     className="underline underline-offset-4"
                   >
                     Пользовательское соглашение
-                  </Link>
-                  ,{" "}
+                  </Link>{" "}
+                  и{" "}
                   <Link
                     href="/about?from=/telegram&doc=privacy_policy"
                     className="underline underline-offset-4"
                   >
                     Политику конфиденциальности
-                  </Link>{" "}
-                  и даю{" "}
+                  </Link>
+                  , а также даю{" "}
                   <Link
                     href="/about?from=/telegram&doc=pd_agreement"
                     className="underline underline-offset-4"
                   >
                     согласие на обработку персональных данных
                   </Link>
-                  .
+                  . Понимаю, что Хабсти помогает кандидатам и работодателям
+                  находить друг друга, но не является работодателем и не
+                  гарантирует трудоустройство.
                 </span>
               </label>
 
