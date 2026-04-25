@@ -50,13 +50,18 @@ export default function EmployerLayout({
     setCurrentEmployerId(getCurrentEmployerId());
   }, []);
 
-  const employerDashboardHref = currentEmployerId ? `/employer/${currentEmployerId}` : "/employer/start";
+  const employerDashboardHref = currentEmployerId
+    ? `/employer/${currentEmployerId}`
+    : "/employer/start";
+
+  const createVacancyHref = currentEmployerId
+    ? `/employer/${currentEmployerId}/create-vacancies`
+    : "/employer/start";
 
   const isStart = pathname === "/employer/start";
   const isOnboarding = pathname.startsWith("/employer/onboarding");
-  const isList = pathname.startsWith("/employer/list");
-  const isDashboard =
-    /^\/employer\/\d+$/.test(pathname) || pathname.includes("/create-vacancies");
+  const isCreateVacancy = pathname.includes("/create-vacancies");
+  const isDashboard = /^\/employer\/\d+$/.test(pathname);
 
   const showTelegramUi = mounted && isTelegram;
 
@@ -83,12 +88,12 @@ export default function EmployerLayout({
                 Кабинет
               </Link>
 
-              <Link href="/employer/onboarding" className={topNavClass(isOnboarding)}>
-                Анкета
+              <Link href={createVacancyHref} className={topNavClass(isCreateVacancy)}>
+                Создать
               </Link>
 
-              <Link href="/employer/list" className={topNavClass(isList)}>
-                Список
+              <Link href="/employer/onboarding" className={topNavClass(isOnboarding)}>
+                Анкета
               </Link>
 
               <Link href="/telegram" className={topNavClass(false)}>
@@ -124,12 +129,12 @@ export default function EmployerLayout({
                 Кабинет
               </Link>
 
-              <Link href="/employer/onboarding" className={bottomNavClass(isOnboarding)}>
-                Анкета
+              <Link href={createVacancyHref} className={bottomNavClass(isCreateVacancy)}>
+                Создать
               </Link>
 
-              <Link href="/employer/list" className={bottomNavClass(isList)}>
-                Список
+              <Link href="/employer/onboarding" className={bottomNavClass(isOnboarding)}>
+                Анкета
               </Link>
             </nav>
           </div>
