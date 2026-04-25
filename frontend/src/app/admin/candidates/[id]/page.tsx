@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
+import { normalizeMediaUrl } from "@/lib/api";
 import { formatReadyToStart, formatSalary } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
 import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
@@ -49,14 +50,75 @@ type CandidateProfile = {
 
 type CandidateReliability = {
   candidate_id: number;
-  total_matches: number;
-  invited_count: number;
-  interviewed_count: number;
-  hired_count: number;
-  rejected_count: number;
-  no_show_count: number;
-  reliability_score: number;
+
+  // Новый ожидаемый формат
+  score?: number;
+  worked_count?: number;
+  cancelled_count?: number;
+
+  // Уже существующий формат, который был в файле
+  total_matches?: number;
+  invited_count?: number;
+  interviewed_count?: number;
+  hired_count?: number;
+  rejected_count?: number;
+  no_show_count?: number;
+  reliability_score?: number;
 };
+
+type CandidatePhoto = {
+  id: number;
+  candidate_id?: number;
+  photo_url: string;
+  is_main?: boolean | null;
+  created_at?: string | null;
+};
+
+type CandidateAvailabilityItem = {
+  id: number;
+  candidate_id: number;
+  available_date: string;
+  slot_type: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  is_active?: boolean;
+};
+
+function getReliabilityScore(reliability: CandidateReliability | null): number {
+  if (!reliability) {
+    return 0;
+  }
+
+  return reliability.score ?? reliability.reliability_score ?? 0;
+}
+
+function formatSlotType(slotType: string): string {
+  const labels: Record<string, string> = {
+    morning: "Утро",
+    day: "День",
+    evening: "Вечер",
+    night: "Ночь",
+    full_day: "Полный день",
+  };
+
+  return labels[slotType] || slotType;
+}
+
+function formatAvailabilityTime(item: CandidateAvailabilityItem): string {
+  if (item.start_time && item.end_time) {
+    return `${item.start_time}–${item.end_time}`;
+  }
+
+  if (item.start_time) {
+    return `с ${item.start_time}`;
+  }
+
+  if (item.end_time) {
+    return `до ${item.end_time}`;
+  }
+
+  return "Время не указано";
+}
 
 export default function AdminCandidateDetailPage({
   params,
@@ -68,16 +130,28 @@ export default function AdminCandidateDetailPage({
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);
   const [reliability, setReliability] = useState<CandidateReliability | null>(null);
+  const [photos, setPhotos] = useState<CandidatePhoto[]>([]);
+  const [availability, setAvailability] = useState<CandidateAvailabilityItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [photoDeletingId, setPhotoDeletingId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
 
   async function loadData() {
     setLoading(true);
+
     try {
-      const [candidateResponse, dashboardResponse, reliabilityResponse] = await Promise.all([
+      const [
+        candidateResponse,
+        dashboardResponse,
+        reliabilityResponse,
+        photosResponse,
+        availabilityResponse,
+      ] = await Promise.all([
         fetch(`/api/candidates/${id}`, { cache: "no-store" }),
         fetch(`/api/candidates/${id}/dashboard`, { cache: "no-store" }),
         fetch(`/api/candidates/${id}/reliability`, { cache: "no-store" }),
+        fetch(`/api/candidates/${id}/photos`, { cache: "no-store" }),
+        fetch(`/api/candidates/${id}/availability`, { cache: "no-store" }),
       ]);
 
       if (!candidateResponse.ok) {
@@ -96,9 +170,26 @@ export default function AdminCandidateDetailPage({
       const dashboardData = (await dashboardResponse.json()) as CandidateDashboard;
       const reliabilityData = (await reliabilityResponse.json()) as CandidateReliability;
 
+      let photosData: CandidatePhoto[] = [];
+      let availabilityData: CandidateAvailabilityItem[] = [];
+
+      if (photosResponse.ok) {
+        photosData = (await photosResponse.json()) as CandidatePhoto[];
+      } else {
+        console.warn("Не удалось загрузить фото кандидата");
+      }
+
+      if (availabilityResponse.ok) {
+        availabilityData = (await availabilityResponse.json()) as CandidateAvailabilityItem[];
+      } else {
+        console.warn("Не удалось загрузить availability кандидата");
+      }
+
       setCandidate(candidateData);
       setDashboard(dashboardData);
       setReliability(reliabilityData);
+      setPhotos(photosData);
+      setAvailability(availabilityData);
     } catch (error) {
       console.error(error);
       setMessage("Не удалось загрузить карточку кандидата");
@@ -107,9 +198,61 @@ export default function AdminCandidateDetailPage({
     }
   }
 
+  async function loadPhotos() {
+    try {
+      const response = await fetch(`/api/candidates/${id}/photos`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Не удалось загрузить фото кандидата");
+      }
+
+      const data = (await response.json()) as CandidatePhoto[];
+      setPhotos(data);
+    } catch (error) {
+      console.error(error);
+      setMessage("Не удалось обновить фото кандидата");
+    }
+  }
+
   useEffect(() => {
     loadData();
   }, [id]);
+
+  async function deleteCandidatePhoto(photoId: number) {
+    const confirmed = window.confirm("Удалить фото кандидата? Это действие нельзя отменить.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    setMessage("");
+    setPhotoDeletingId(photoId);
+
+    try {
+      const response = await fetch(`/api/candidates/${id}/photos/${photoId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.detail || "Не удалось удалить фото кандидата");
+      }
+
+      setMessage("Фото кандидата удалено");
+      await loadPhotos();
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Не удалось удалить фото кандидата");
+      }
+    } finally {
+      setPhotoDeletingId(null);
+    }
+  }
 
   async function runMatchAction(matchId: number, action: string, successText: string) {
     setMessage("");
@@ -143,6 +286,8 @@ export default function AdminCandidateDetailPage({
   if (!candidate || !dashboard || !reliability) {
     return <main className="px-4 py-6">Кандидат не найден</main>;
   }
+
+  const reliabilityScore = getReliabilityScore(reliability);
 
   return (
     <main className="px-4 py-6 space-y-6">
@@ -180,52 +325,172 @@ export default function AdminCandidateDetailPage({
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
+            <h2 className="text-xl font-semibold">Модерация фото</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Фото кандидата, которые используются в профиле и карточках.
+            </p>
+          </div>
+          <div className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+            {photos.length} фото
+          </div>
+        </div>
+
+        {photos.length === 0 ? (
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            У кандидата пока нет фото.
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {photos.map((photo) => {
+              const photoUrl = normalizeMediaUrl(photo.photo_url) || "";
+
+              return (
+                <div
+                  key={photo.id}
+                  className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                >
+                  <div className="aspect-[4/3] bg-slate-100">
+                    {photoUrl ? (
+                      <img
+                        src={photoUrl}
+                        alt={`Фото кандидата ${photo.id}`}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-4 text-center text-sm text-slate-500">
+                        Не удалось подготовить ссылку на фото
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 p-3">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <div className="text-slate-600">ID фото: {photo.id}</div>
+                      {photo.is_main ? (
+                        <div className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                          главное
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteCandidatePhoto(photo.id)}
+                      disabled={photoDeletingId === photo.id}
+                      className="w-full rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {photoDeletingId === photo.id ? "Удаляем..." : "Удалить фото"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
             <h2 className="text-xl font-semibold">Индекс надежности</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Оценка строится на основе приглашений, собеседований, наймов, отказов и невыходов.
+              Оценка строится на основе истории приглашений, смен, отказов и невыходов.
             </p>
           </div>
           <div
             className={`rounded-full border px-4 py-2 text-sm font-medium ${reliabilityBadgeClass(
-              reliability.reliability_score
+              reliabilityScore
             )}`}
           >
-            {reliabilityLabel(reliability.reliability_score)}
+            {reliabilityLabel(reliabilityScore)}
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3 sm:col-span-2">
             <div className="text-xs text-slate-500">Индекс надежности</div>
-            <div className="mt-1 text-2xl font-semibold">
-              {reliability.reliability_score} / 100
+            <div className="mt-1 text-2xl font-semibold">{reliabilityScore} / 100</div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Отработано</div>
+            <div className="mt-1 text-xl font-semibold">
+              {reliability.worked_count ?? reliability.hired_count ?? 0}
             </div>
           </div>
-          <div className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Приглашений</div>
-            <div className="mt-1 text-xl font-semibold">{reliability.invited_count}</div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Собеседований</div>
-            <div className="mt-1 text-xl font-semibold">{reliability.interviewed_count}</div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Наймов</div>
-            <div className="mt-1 text-xl font-semibold">{reliability.hired_count}</div>
-          </div>
-          <div className="rounded-xl bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Отказов</div>
-            <div className="mt-1 text-xl font-semibold">{reliability.rejected_count}</div>
-          </div>
+
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Не дошел</div>
-            <div className="mt-1 text-xl font-semibold">{reliability.no_show_count}</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.no_show_count ?? 0}</div>
           </div>
+
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Отмены</div>
+            <div className="mt-1 text-xl font-semibold">
+              {reliability.cancelled_count ?? reliability.rejected_count ?? 0}
+            </div>
+          </div>
+
           <div className="rounded-xl bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Всего откликов</div>
-            <div className="mt-1 text-xl font-semibold">{reliability.total_matches}</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.total_matches ?? 0}</div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Приглашений</div>
+            <div className="mt-1 text-xl font-semibold">{reliability.invited_count ?? 0}</div>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Собеседований</div>
+            <div className="mt-1 text-xl font-semibold">
+              {reliability.interviewed_count ?? 0}
+            </div>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Доступность кандидата</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Read-only просмотр дат и слотов, которые указал кандидат.
+            </p>
+          </div>
+          <div className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+            {availability.length} слотов
+          </div>
+        </div>
+
+        {availability.length === 0 ? (
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+            Кандидат пока не указал доступность.
+          </div>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
+            <div className="grid grid-cols-4 gap-3 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
+              <div>Дата</div>
+              <div>Слот</div>
+              <div>Время</div>
+              <div>Статус</div>
+            </div>
+
+            <div className="divide-y divide-slate-200">
+              {availability.map((item) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-4 gap-3 px-4 py-3 text-sm text-slate-700"
+                >
+                  <div>{item.available_date}</div>
+                  <div>{formatSlotType(item.slot_type)}</div>
+                  <div>{formatAvailabilityTime(item)}</div>
+                  <div>{item.is_active === false ? "Неактивен" : "Активен"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
