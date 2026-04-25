@@ -68,14 +68,16 @@ export default function EmployerLayout({
 
   const createVacancyHref = currentEmployerId
     ? `/employer/${currentEmployerId}/create-vacancies`
-    : "/employer/onboarding";
+    : "/employer/start";
 
-  const onboardingHref = "/employer/onboarding";
+  const infoHref = currentEmployerId
+    ? `/about?from=/employer/${currentEmployerId}`
+    : "/about?from=/employer/start";
 
   const isStart = pathname === "/employer/start";
-  const isOnboarding = pathname.startsWith("/employer/onboarding");
   const isCreateVacancy = pathname.includes("/create-vacancies");
   const isDashboard = /^\/employer\/\d+$/.test(pathname);
+  const isInfo = pathname === "/about";
 
   const showTelegramUi = mounted && isTelegram;
 
@@ -106,8 +108,8 @@ export default function EmployerLayout({
                 Создать
               </Link>
 
-              <Link href={onboardingHref} className={topNavClass(isOnboarding)}>
-                Анкета
+              <Link href={infoHref} className={topNavClass(isInfo)}>
+                Инфо
               </Link>
 
               <Link href="/telegram" className={topNavClass(false)}>
@@ -147,8 +149,8 @@ export default function EmployerLayout({
                 Создать
               </Link>
 
-              <Link href={onboardingHref} className={bottomNavClass(isOnboarding)}>
-                Анкета
+              <Link href={infoHref} className={bottomNavClass(isInfo)}>
+                Инфо
               </Link>
             </nav>
           </div>

@@ -1094,28 +1094,37 @@ export default function EmployerDashboardPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Link
-                href={`/employer/${currentUser.employer_id}/create-vacancies`}
-                className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                Создать вакансию
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  void loadPageData();
-                }}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Обновить
-              </button>
-              <Link
-                href={`/about?from=/employer/${currentUser.employer_id}`}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                О приложении
-              </Link>
-            </div>
+  <Link
+    href={`/employer/${currentUser.employer_id}/create-vacancies`}
+    className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+  >
+    Создать вакансию
+  </Link>
+
+  <Link
+    href="/employer/onboarding"
+    className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+  >
+    Редактировать данные
+  </Link>
+
+  <button
+    type="button"
+    onClick={() => {
+      void loadPageData();
+    }}
+    className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+  >
+    Обновить
+  </button>
+
+  <Link
+    href={`/about?from=/employer/${currentUser.employer_id}`}
+    className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+  >
+    О приложении
+  </Link>
+</div>
           </div>
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
