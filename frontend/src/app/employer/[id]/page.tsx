@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { normalizeMediaUrl } from "@/lib/api";
+import { apiFetch, apiPostJson, normalizeMediaUrl } from "@/lib/api";
 import type { CurrentUserRead } from "@/lib/current-user";
 
 type EmployerItem = {
@@ -85,20 +85,6 @@ type MatchAction = {
   endpoint: string;
   successText: string;
 };
-
-async function readJsonSafe<T>(response: Response): Promise<T | null> {
-  const text = await response.text();
-
-  if (!text.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return null;
-  }
-}
 
 function vacancyStatusLabel(status: string) {
   switch (status) {
@@ -808,44 +794,26 @@ export default function EmployerDashboardPage() {
       setErrorText("");
       setMessageText("");
 
-      const meResponse = await fetch("/api/auth/me", { cache: "no-store" });
-      if (!meResponse.ok) {
-        throw new Error("Не удалось загрузить текущего пользователя");
-      }
-      const me = (await meResponse.json()) as CurrentUserRead;
+      const me = await apiFetch<CurrentUserRead>("/auth/me");
       setCurrentUser(me);
 
       if (!me.is_employer || !me.employer_id) {
         throw new Error("Профиль работодателя не найден");
       }
 
-      const [employerResponse, vacanciesResponse, matchesResponse] = await Promise.all([
-        fetch("/api/me/employer", { cache: "no-store" }),
-        fetch("/api/me/employer/vacancies", { cache: "no-store" }),
-        fetch("/api/me/employer/matches", { cache: "no-store" }),
+      const [currentEmployer, vacanciesData, matchesData] = await Promise.all([
+        apiFetch<EmployerItem>("/me/employer"),
+        apiFetch<VacancyItem[]>("/me/employer/vacancies"),
+        apiFetch<MatchItem[]>("/me/employer/matches"),
       ]);
-
-      if (!employerResponse.ok) {
-        throw new Error("Не удалось загрузить работодателя");
-      }
-      if (!vacanciesResponse.ok) {
-        throw new Error("Не удалось загрузить вакансии");
-      }
-      if (!matchesResponse.ok) {
-        throw new Error("Не удалось загрузить кандидатов");
-      }
-
-      const currentEmployer = (await employerResponse.json()) as EmployerItem;
-      const vacanciesData =
-        ((await readJsonSafe<VacancyItem[]>(vacanciesResponse)) as VacancyItem[] | null) || [];
-      const matchesData =
-        ((await readJsonSafe<MatchItem[]>(matchesResponse)) as MatchItem[] | null) || [];
 
       setEmployer(currentEmployer);
 
-      const employerVacancies = [...vacanciesData].sort((a, b) => b.id - a.id);
+      const employerVacancies = [...(vacanciesData || [])].sort((a, b) => b.id - a.id);
+      const employerMatches = matchesData || [];
+
       setVacancies(employerVacancies);
-      setMatches(matchesData);
+      setMatches(employerMatches);
 
       setSelectedVacancyId((prev) => {
         if (prev && employerVacancies.some((item) => item.id === prev)) {
@@ -855,21 +823,16 @@ export default function EmployerDashboardPage() {
       });
 
       const uniqueCandidateIds = Array.from(
-        new Set(matchesData.map((item) => item.candidate_id))
+        new Set(employerMatches.map((item) => item.candidate_id))
       );
 
       if (uniqueCandidateIds.length > 0) {
         const reliabilityResults = await Promise.all(
           uniqueCandidateIds.map(async (candidateId) => {
             try {
-              const response = await fetch(
-                `/api/candidates/${candidateId}/reliability`,
-                { cache: "no-store" }
+              const data = await apiFetch<CandidateReliability>(
+                `/candidates/${candidateId}/reliability`
               );
-              if (!response.ok) {
-                return null;
-              }
-              const data = (await response.json()) as CandidateReliability;
               return data;
             } catch {
               return null;
@@ -1024,16 +987,7 @@ export default function EmployerDashboardPage() {
       setMessageText("");
       setErrorText("");
 
-      const response = await fetch(`/api/matches/${matchId}/${endpoint}`, {
-        method: "POST",
-      });
-
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось изменить статус");
-      }
+      await apiPostJson(`/matches/${matchId}/${endpoint}`, {});
 
       if (endpoint === "invite") {
         setCandidateFilter("in_work");
@@ -1075,17 +1029,7 @@ export default function EmployerDashboardPage() {
       setMessageText("");
       setErrorText("");
 
-      const response = await fetch(`/api/vacancies/${vacancyId}/${endpoint}`, {
-        method: "POST",
-      });
-
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!response.ok) {
-        throw new Error(data?.detail || "Не удалось изменить статус вакансии");
-      }
-
+      await apiPostJson(`/vacancies/${vacancyId}/${endpoint}`, {});
       setMessageText(successText);
       await loadPageData();
     } catch (error) {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { apiFetch, apiPostJson } from "@/lib/api";
 import type { CurrentUserRead } from "@/lib/current-user";
 
 type EmployerForm = {
@@ -76,7 +77,7 @@ function inputClass(hasError?: boolean) {
 export default function EmployerOnboardingPage() {
   const router = useRouter();
 
-  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
+  const [, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [bootLoading, setBootLoading] = useState(true);
 
   const [form, setForm] = useState<EmployerForm>({
@@ -99,15 +100,7 @@ export default function EmployerOnboardingPage() {
         setBootLoading(true);
         setErrorText("");
 
-        const meResponse = await fetch("/api/auth/me", {
-          cache: "no-store",
-        });
-
-        if (!meResponse.ok) {
-          throw new Error("Не удалось загрузить текущего пользователя");
-        }
-
-        const me = (await meResponse.json()) as CurrentUserRead;
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
         setCurrentUser(me);
 
         if (me.is_employer && me.employer_id) {
@@ -115,7 +108,10 @@ export default function EmployerOnboardingPage() {
           return;
         }
 
-        const presetName = [me.first_name, me.last_name].filter(Boolean).join(" ").trim();
+        const presetName = [me.first_name, me.last_name]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
 
         setForm((prev) => ({
           ...prev,
@@ -167,34 +163,15 @@ export default function EmployerOnboardingPage() {
 
       setSaving(true);
 
-      const payload = {
+      const employer = await apiPostJson<EmployerRead>("/me/employer", {
         company_name: form.company_name.trim(),
         contact_name: form.contact_name.trim(),
         phone: form.phone.trim(),
         telegram_username: normalizeTelegramUsername(form.telegram_username) || null,
         city: form.city.trim(),
         website: normalizeWebsite(form.website) || null,
-      };
-
-      const response = await fetch("/api/me/employer", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(payload),
       });
 
-      const text = await response.text();
-      const data = text ? (JSON.parse(text) as EmployerRead | { detail?: string }) : null;
-
-      if (!response.ok) {
-        throw new Error(
-          (data as { detail?: string } | null)?.detail ||
-            "Не удалось создать профиль работодателя"
-        );
-      }
-
-      const employer = data as EmployerRead;
       setSuccessText("Профиль работодателя сохранен");
 
       setTimeout(() => {

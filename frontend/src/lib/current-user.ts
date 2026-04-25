@@ -79,9 +79,9 @@ export function clearLegacyIds() {
   window.localStorage.removeItem(EMPLOYER_ID_STORAGE_KEY);
 }
 
-export function getCurrentCandidateId() {
+export function getCurrentCandidateId(): number | null {
   if (typeof window === "undefined") {
-    return 1;
+    return null;
   }
 
   const possibleKeys = [
@@ -97,12 +97,12 @@ export function getCurrentCandidateId() {
     }
   }
 
-  return 1;
+  return null;
 }
 
-export function getCurrentEmployerId() {
+export function getCurrentEmployerId(): number | null {
   if (typeof window === "undefined") {
-    return 1;
+    return null;
   }
 
   const possibleKeys = [
@@ -118,5 +118,5 @@ export function getCurrentEmployerId() {
     }
   }
 
-  return 1;
+  return null;
 }

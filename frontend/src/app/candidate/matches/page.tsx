@@ -72,6 +72,26 @@ function isTelegramMiniApp() {
   return Boolean(window.Telegram?.WebApp);
 }
 
+function normalizeArrayResponse<T>(
+  value: unknown,
+  keys: string[] = []
+): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === "object") {
+    for (const key of keys) {
+      const nested = (value as Record<string, unknown>)[key];
+      if (Array.isArray(nested)) {
+        return nested as T[];
+      }
+    }
+  }
+
+  return [];
+}
+
 function statusLabel(status: string) {
   switch (status) {
     case "shortlist":
@@ -466,18 +486,32 @@ export default function CandidateMatchesPage() {
         throw new Error("Профиль кандидата не найден");
       }
 
-      const [candidateData, matchesData, vacanciesData] = await Promise.all([
+      const [candidateData, matchesRaw, vacanciesRaw] = await Promise.all([
         apiFetch<CandidateItem>("/me/candidate"),
-        apiFetch<MatchItem[]>("/me/candidate/matches"),
-        apiFetch<VacancyItem[]>("/me/candidate/vacancies"),
+        apiFetch<unknown>("/me/candidate/matches"),
+        apiFetch<unknown>("/me/candidate/vacancies"),
+      ]);
+
+      const matchesData = normalizeArrayResponse<MatchItem>(matchesRaw, [
+        "items",
+        "matches",
+        "results",
+        "data",
+      ]);
+
+      const vacanciesData = normalizeArrayResponse<VacancyItem>(vacanciesRaw, [
+        "items",
+        "vacancies",
+        "results",
+        "data",
       ]);
 
       const vacanciesMap = new Map<number, VacancyItem>();
-      for (const vacancy of vacanciesData || []) {
+      for (const vacancy of vacanciesData) {
         vacanciesMap.set(vacancy.id, vacancy);
       }
 
-      const enrichedMatches: EnrichedMatchItem[] = (matchesData || [])
+      const enrichedMatches: EnrichedMatchItem[] = matchesData
         .map((match) => ({
           ...match,
           vacancy: vacanciesMap.get(match.vacancy_id) || null,
@@ -730,8 +764,7 @@ export default function CandidateMatchesPage() {
               Пока здесь пусто
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              По выбранным фильтрам откликов сейчас нет. Можно посмотреть новые
-              вакансии и откликнуться на подходящие.
+              Пока нет откликов.
             </p>
             <div className="mt-4">
               <Link

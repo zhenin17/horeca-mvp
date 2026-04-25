@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { uploadVacancyPhoto } from "@/lib/api";
+import {
+  apiFetch,
+  apiPostJson,
+  uploadVacancyPhoto,
+} from "@/lib/api";
 import type { CurrentUserRead } from "@/lib/current-user";
 import {
   CITY_OPTIONS,
@@ -178,27 +182,15 @@ export default function EmployerCreateVacancyPage() {
         setBootLoading(true);
         setErrorText("");
 
-        const [meResponse, employerResponse] = await Promise.all([
-          fetch("/api/auth/me", { cache: "no-store" }),
-          fetch("/api/me/employer", { cache: "no-store" }),
-        ]);
-
-        if (!meResponse.ok) {
-          throw new Error("Не удалось загрузить текущего пользователя");
-        }
-
-        const me = (await meResponse.json()) as CurrentUserRead;
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
         setCurrentUser(me);
 
         if (!me.is_employer || !me.employer_id) {
-          throw new Error("Профиль работодателя не найден");
+          setEmployer(null);
+          return;
         }
 
-        if (!employerResponse.ok) {
-          throw new Error("Не удалось загрузить данные работодателя");
-        }
-
-        const employerData = (await employerResponse.json()) as EmployerItem;
+        const employerData = await apiFetch<EmployerItem>("/me/employer");
         setEmployer(employerData);
       } catch (error) {
         console.error(error);
@@ -342,39 +334,13 @@ export default function EmployerCreateVacancyPage() {
         status: form.status,
       };
 
-      const response = await fetch("/api/me/employer/vacancies", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const text = await response.text();
-      let data: CreatedVacancyResponse | { detail?: string; message?: string } | null = null;
-
-      if (text.trim()) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = null;
-        }
-      }
-
-      if (!response.ok) {
-        const backendMessage =
-          (data as { detail?: string; message?: string } | null)?.detail ||
-          (data as { detail?: string; message?: string } | null)?.message ||
-          text ||
-          `Не удалось создать вакансию (${response.status})`;
-
-        throw new Error(backendMessage);
-      }
+      const data = await apiPostJson<CreatedVacancyResponse>(
+        "/me/employer/vacancies",
+        payload
+      );
 
       const createdVacancyId =
-        typeof (data as CreatedVacancyResponse | null)?.id === "number"
-          ? (data as CreatedVacancyResponse).id
-          : null;
+        typeof data?.id === "number" ? data.id : null;
 
       if (selectedPhotoFile && createdVacancyId) {
         try {
@@ -427,12 +393,34 @@ export default function EmployerCreateVacancyPage() {
     );
   }
 
-  if (!currentUser?.is_employer || !currentUser.employer_id || !employer) {
+  if (!currentUser?.is_employer || !currentUser.employer_id) {
     return (
-      <main className="px-4 py-6">
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {errorText || "Профиль работодателя не найден"}
+      <main className="px-4 py-6 space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          Сначала нужно создать профиль работодателя.
         </div>
+        <Link
+          href="/employer/onboarding"
+          className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:opacity-90"
+        >
+          Перейти к анкете работодателя
+        </Link>
+      </main>
+    );
+  }
+
+  if (!employer) {
+    return (
+      <main className="px-4 py-6 space-y-4">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {errorText || "Не удалось загрузить профиль работодателя"}
+        </div>
+        <Link
+          href="/employer/start"
+          className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Вернуться на старт
+        </Link>
       </main>
     );
   }

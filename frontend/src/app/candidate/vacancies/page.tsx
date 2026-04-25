@@ -474,6 +474,26 @@ function getVacancyCoverPhoto(vacancy: VacancyItem) {
   );
 }
 
+function normalizeArrayResponse<T>(
+  value: unknown,
+  keys: string[] = []
+): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === "object") {
+    for (const key of keys) {
+      const nested = (value as Record<string, unknown>)[key];
+      if (Array.isArray(nested)) {
+        return nested as T[];
+      }
+    }
+  }
+
+  return [];
+}
+
 function VacancyPhotoBlock({
   vacancy,
   roleEmoji,
@@ -538,18 +558,32 @@ export default function CandidateVacanciesPage() {
         throw new Error("Профиль кандидата не найден");
       }
 
-      const [candidateData, vacanciesData, matchesData] = await Promise.all([
+      const [candidateData, vacanciesRaw, matchesRaw] = await Promise.all([
         apiFetch<CandidateItem>("/me/candidate"),
-        apiFetch<VacancyItem[]>("/me/candidate/vacancies"),
-        apiFetch<MatchItem[]>("/me/candidate/matches"),
+        apiFetch<unknown>("/me/candidate/vacancies"),
+        apiFetch<unknown>("/me/candidate/matches"),
+      ]);
+
+      const vacanciesData = normalizeArrayResponse<VacancyItem>(vacanciesRaw, [
+        "items",
+        "vacancies",
+        "results",
+        "data",
+      ]);
+
+      const matchesData = normalizeArrayResponse<MatchItem>(matchesRaw, [
+        "items",
+        "matches",
+        "results",
+        "data",
       ]);
 
       const matchByVacancyId = new Map<number, MatchItem>();
-      for (const match of matchesData || []) {
+      for (const match of matchesData) {
         matchByVacancyId.set(match.vacancy_id, match);
       }
 
-      const preparedVacancies: VacancyCardItem[] = (vacanciesData || [])
+      const preparedVacancies: VacancyCardItem[] = vacanciesData
         .map((vacancy) => {
           const fitScore = calculateFitScore(candidateData, vacancy);
           const fitExplanation = buildFitExplanation(candidateData, vacancy);
@@ -823,7 +857,7 @@ export default function CandidateVacanciesPage() {
 
         {filteredVacancies.length === 0 ? (
           <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-            По выбранным фильтрам вакансий пока нет.
+            Пока нет доступных вакансий.
           </div>
         ) : (
           <div className="mt-4 space-y-4">

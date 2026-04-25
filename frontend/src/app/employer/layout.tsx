@@ -3,18 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-
-type CurrentUserRead = {
-  telegram_user_id: number;
-  telegram_username?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-  candidate_id: number | null;
-  employer_id: number | null;
-  is_candidate: boolean;
-  is_employer: boolean;
-  is_admin: boolean;
-};
+import { apiFetch } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 function topNavClass(isActive: boolean) {
   return isActive
@@ -61,16 +51,7 @@ export default function EmployerLayout({
         setMounted(true);
         setIsTelegram(detectTelegramWebApp());
 
-        const response = await fetch("/api/auth/me", {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          setCurrentEmployerId(null);
-          return;
-        }
-
-        const me = (await response.json()) as CurrentUserRead;
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
         setCurrentEmployerId(me.employer_id ?? null);
       } catch (error) {
         console.error(error);
@@ -87,9 +68,9 @@ export default function EmployerLayout({
 
   const createVacancyHref = currentEmployerId
     ? `/employer/${currentEmployerId}/create-vacancies`
-    : "/employer/start";
+    : "/employer/onboarding";
 
-  const onboardingHref = currentEmployerId ? employerDashboardHref : "/employer/onboarding";
+  const onboardingHref = "/employer/onboarding";
 
   const isStart = pathname === "/employer/start";
   const isOnboarding = pathname.startsWith("/employer/onboarding");
