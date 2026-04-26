@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CurrentUserRead } from "@/lib/current-user";
-import { apiFetch, normalizeMediaUrl, uploadCandidatePhoto } from "@/lib/api";
+import {
+  apiFetch,
+  apiPatchJson,
+  normalizeMediaUrl,
+  uploadCandidatePhoto,
+} from "@/lib/api";
 import {
   CITY_OPTIONS,
   ROLE_OPTIONS,
@@ -323,29 +328,17 @@ export default function CandidateOnboardingPage() {
     setPhotoErrorText("");
 
     try {
-      const response = await fetch("/api/me/candidate", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          full_name: form.full_name.trim(),
-          phone: form.phone.trim(),
-          telegram_username: form.telegram_username.trim() || null,
-          city: form.city.trim(),
-          district: form.district.trim() || null,
-          primary_role: form.primary_role.trim(),
-          horeca_experience_months: Number(form.horeca_experience_months || "0"),
-          ready_to_start: form.ready_to_start,
-          expected_income: form.expected_income.trim() || null,
-        }),
+      await apiPatchJson<LoadCandidateResponse>("/me/candidate", {
+        full_name: form.full_name.trim(),
+        phone: form.phone.trim(),
+        telegram_username: form.telegram_username.trim() || null,
+        city: form.city.trim(),
+        district: form.district.trim() || null,
+        primary_role: form.primary_role.trim(),
+        horeca_experience_months: Number(form.horeca_experience_months || "0"),
+        ready_to_start: form.ready_to_start,
+        expected_income: form.expected_income.trim() || null,
       });
-
-      const data = (await response.json()) as { detail?: string };
-
-      if (!response.ok) {
-        throw new Error(data.detail || "Не удалось сохранить анкету");
-      }
 
       if (selectedPhotoFile) {
         try {
