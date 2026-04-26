@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiPostJson, normalizeMediaUrl } from "@/lib/api";
 import type { CurrentUserRead } from "@/lib/current-user";
@@ -626,10 +626,13 @@ function VacancyHeroPhoto({
 }
 
 export default function CandidateVacancyDetailsPage() {
-  const params = useParams<{ id: string }>();
-  const router = useRouter();
-
-  const vacancyId = Number(params?.id);
+  export default function CandidateVacancyDetailsPage() {
+    const params = useParams<{ id: string }>();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+  
+    const vacancyId = Number(params?.id);
+    const backHref = searchParams.get("from") || "/candidate/vacancies";
 
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
@@ -907,10 +910,10 @@ export default function CandidateVacancyDetailsPage() {
                 </button>
 
                 <Link
-                  href="/candidate/vacancies"
-                  className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
+                 href={backHref}
+                 className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-50"
                 >
-                  Назад к вакансиям
+                 {backHref === "/candidate/matches" ? "Назад к откликам" : "Назад к вакансиям"}
                 </Link>
               </div>
             </div>

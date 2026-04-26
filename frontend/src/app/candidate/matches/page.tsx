@@ -81,15 +81,155 @@ function normalizeArrayResponse<T>(
   }
 
   if (value && typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+
     for (const key of keys) {
-      const nested = (value as Record<string, unknown>)[key];
+      const nested = objectValue[key];
       if (Array.isArray(nested)) {
         return nested as T[];
       }
     }
+
+    if (Array.isArray(objectValue.items)) {
+      return objectValue.items as T[];
+    }
+
+    if (Array.isArray(objectValue.matches)) {
+      return objectValue.matches as T[];
+    }
+
+    if (Array.isArray(objectValue.suggested_vacancies)) {
+      return objectValue.suggested_vacancies as T[];
+    }
+
+    if (Array.isArray(objectValue.vacancies)) {
+      return objectValue.vacancies as T[];
+    }
+
+    if (Array.isArray(objectValue.results)) {
+      return objectValue.results as T[];
+    }
+
+    if (Array.isArray(objectValue.data)) {
+      return objectValue.data as T[];
+    }
   }
 
   return [];
+}
+
+function normalizeVacancyItem(raw: unknown): VacancyItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  const source =
+    objectValue.vacancy && typeof objectValue.vacancy === "object"
+      ? (objectValue.vacancy as Record<string, unknown>)
+      : objectValue;
+
+  const id = Number(source.id);
+  const employerId = Number(source.employer_id);
+
+  if (!Number.isFinite(id) || id <= 0) {
+    return null;
+  }
+
+  const listingType =
+    source.listing_type === "part_time" || source.listing_type === "shift"
+      ? source.listing_type
+      : "job";
+
+  const slotsCount =
+    source.slots_count === null || source.slots_count === undefined
+      ? null
+      : Number(source.slots_count);
+
+  return {
+    id,
+    employer_id: Number.isFinite(employerId) ? employerId : 0,
+    role: String(source.role ?? ""),
+    venue_name: String(source.venue_name ?? ""),
+    city: String(source.city ?? ""),
+    district:
+      source.district === null || source.district === undefined
+        ? null
+        : String(source.district),
+    salary_text:
+      source.salary_text === null || source.salary_text === undefined
+        ? null
+        : String(source.salary_text),
+    schedule_text:
+      source.schedule_text === null || source.schedule_text === undefined
+        ? null
+        : String(source.schedule_text),
+    needed_start:
+      source.needed_start === null || source.needed_start === undefined
+        ? null
+        : String(source.needed_start),
+    listing_type: listingType,
+    shift_date:
+      source.shift_date === null || source.shift_date === undefined
+        ? null
+        : String(source.shift_date),
+    shift_start_time:
+      source.shift_start_time === null || source.shift_start_time === undefined
+        ? null
+        : String(source.shift_start_time),
+    shift_end_time:
+      source.shift_end_time === null || source.shift_end_time === undefined
+        ? null
+        : String(source.shift_end_time),
+    urgent_flag: Boolean(source.urgent_flag),
+    slots_count: Number.isFinite(slotsCount) ? slotsCount : null,
+    status: String(source.status ?? "active"),
+    photos: normalizeArrayResponse<VacancyPhoto>(source.photos, [
+      "items",
+      "photos",
+      "results",
+      "data",
+    ]),
+  };
+}
+
+function normalizeMatchItem(raw: unknown): EnrichedMatchItem | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  const nestedVacancy = normalizeVacancyItem(objectValue.vacancy);
+  const id = Number(objectValue.id);
+  const candidateId = Number(objectValue.candidate_id);
+  const employerId = Number(objectValue.employer_id);
+  const vacancyId = Number(objectValue.vacancy_id ?? nestedVacancy?.id);
+  const matchScore =
+    objectValue.match_score === null || objectValue.match_score === undefined
+      ? null
+      : Number(objectValue.match_score);
+
+  if (!Number.isFinite(id) || !Number.isFinite(vacancyId)) {
+    return null;
+  }
+
+  return {
+    id,
+    candidate_id: Number.isFinite(candidateId) ? candidateId : 0,
+    employer_id: Number.isFinite(employerId)
+      ? employerId
+      : nestedVacancy?.employer_id ?? 0,
+    vacancy_id: vacancyId,
+    match_score: Number.isFinite(matchScore) ? matchScore : null,
+    status: String(objectValue.status ?? ""),
+    comment:
+      objectValue.comment === null || objectValue.comment === undefined
+        ? null
+        : String(objectValue.comment),
+    vacancy: nestedVacancy,
+  };
 }
 
 function statusLabel(status: string) {
@@ -413,13 +553,20 @@ function belongsToListingTypeFilter(
 }
 
 function getVacancyCoverPhoto(vacancy?: VacancyItem | null) {
-  if (!vacancy?.photos || vacancy.photos.length === 0) {
+  const photos = normalizeArrayResponse<VacancyPhoto>(vacancy?.photos, [
+    "items",
+    "photos",
+    "results",
+    "data",
+  ]);
+
+  if (photos.length === 0) {
     return null;
   }
 
   return (
-    vacancy.photos.find((photo) => photo.is_cover) ||
-    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    photos.find((photo) => photo.is_cover) ||
+    [...photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
     null
   );
 }
@@ -445,7 +592,7 @@ function VacancyMatchPhoto({
             Фото вакансии пока не добавлено
           </div>
           <div className="mt-1 text-xs text-slate-500">
-            {vacancy?.venue_name || "Без названия"}
+            {vacancy?.venue_name || "Заведение не указано"}
           </div>
         </div>
       </div>
@@ -492,19 +639,24 @@ export default function CandidateMatchesPage() {
         apiFetch<unknown>("/me/candidate/vacancies"),
       ]);
 
-      const matchesData = normalizeArrayResponse<MatchItem>(matchesRaw, [
+      const matchesData = normalizeArrayResponse<unknown>(matchesRaw, [
         "items",
         "matches",
         "results",
         "data",
-      ]);
+      ])
+        .map(normalizeMatchItem)
+        .filter(Boolean) as EnrichedMatchItem[];
 
-      const vacanciesData = normalizeArrayResponse<VacancyItem>(vacanciesRaw, [
+      const vacanciesData = normalizeArrayResponse<unknown>(vacanciesRaw, [
+        "suggested_vacancies",
         "items",
         "vacancies",
         "results",
         "data",
-      ]);
+      ])
+        .map(normalizeVacancyItem)
+        .filter(Boolean) as VacancyItem[];
 
       const vacanciesMap = new Map<number, VacancyItem>();
       for (const vacancy of vacanciesData) {
@@ -514,7 +666,7 @@ export default function CandidateMatchesPage() {
       const enrichedMatches: EnrichedMatchItem[] = matchesData
         .map((match) => ({
           ...match,
-          vacancy: vacanciesMap.get(match.vacancy_id) || null,
+          vacancy: match.vacancy || vacanciesMap.get(match.vacancy_id) || null,
         }))
         .sort((a, b) => b.id - a.id);
 
@@ -621,7 +773,7 @@ export default function CandidateMatchesPage() {
 
                 {candidate ? (
                   <div className="mt-3 inline-flex rounded-full bg-violet-50 px-3 py-1 text-sm text-violet-700 ring-1 ring-violet-100">
-                    {candidate.primary_role}
+                    {candidate.primary_role || "Роль не указана"}
                   </div>
                 ) : null}
               </div>
@@ -828,7 +980,7 @@ export default function CandidateMatchesPage() {
                         </h2>
 
                         <div className="mt-1 text-sm text-slate-700">
-                          {vacancy?.venue_name || "Без названия"}
+                          {vacancy?.venue_name || "Заведение не указано"}
                         </div>
 
                         {vacancy?.listing_type === "shift" && formatShiftTimeLine(vacancy) ? (
@@ -883,7 +1035,7 @@ export default function CandidateMatchesPage() {
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Link
-                        href={`/candidate/vacancies/${match.vacancy_id}`}
+                        href={`/candidate/vacancies/${match.vacancy_id}?from=/candidate/matches`}
                         className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
                       >
                         {getOpenActionText(vacancy)}
