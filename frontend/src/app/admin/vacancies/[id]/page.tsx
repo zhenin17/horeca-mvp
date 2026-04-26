@@ -6,6 +6,7 @@ import { apiFetch, getAccessToken, normalizeMediaUrl } from "@/lib/api";
 import { formatReadyToStart } from "@/lib/format";
 import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
 import { statusLabel } from "@/lib/status";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateItem = {
   id: number;
@@ -153,6 +154,7 @@ export default function AdminVacancyDetailPage({
 }) {
   const { id } = use(params);
 
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [shortlist, setShortlist] = useState<VacancyShortlist | null>(null);
   const [funnel, setFunnel] = useState<VacancyFunnel | null>(null);
   const [photos, setPhotos] = useState<VacancyPhoto[]>([]);
@@ -165,17 +167,19 @@ export default function AdminVacancyDetailPage({
     setLoading(true);
 
     try {
-      const [shortlistResponse, funnelResponse, photosData] = await Promise.all([
-        fetch(`/api/shortlists/vacancy/${id}`, {
-          cache: "no-store",
-          headers: getAuthHeaders(),
-        }),
-        fetch(`/api/shortlists/vacancy/${id}/funnel`, {
-          cache: "no-store",
-          headers: getAuthHeaders(),
-        }),
-        apiFetch<VacancyPhoto[]>(`/me/staff/vacancies/${id}/photos`),
-      ]);
+      const [currentUserData, shortlistResponse, funnelResponse, photosData] =
+        await Promise.all([
+          apiFetch<CurrentUserRead>("/auth/me"),
+          fetch(`/api/shortlists/vacancy/${id}`, {
+            cache: "no-store",
+            headers: getAuthHeaders(),
+          }),
+          fetch(`/api/shortlists/vacancy/${id}/funnel`, {
+            cache: "no-store",
+            headers: getAuthHeaders(),
+          }),
+          apiFetch<VacancyPhoto[]>(`/me/staff/vacancies/${id}/photos`),
+        ]);
 
       if (!shortlistResponse.ok) {
         const data = await shortlistResponse.json().catch(() => null);
@@ -190,6 +194,7 @@ export default function AdminVacancyDetailPage({
       const shortlistData = (await shortlistResponse.json()) as VacancyShortlist;
       const funnelData = (await funnelResponse.json()) as VacancyFunnel;
 
+      setCurrentUser(currentUserData);
       setShortlist(shortlistData);
       setFunnel(funnelData);
       setPhotos(photosData);
@@ -304,6 +309,8 @@ export default function AdminVacancyDetailPage({
     return <main className="px-4 py-6">Вакансия не найдена</main>;
   }
 
+  const canModeratePhotos = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
+
   return (
     <main className="px-4 py-6 space-y-6">
       <div>
@@ -345,6 +352,12 @@ export default function AdminVacancyDetailPage({
           </div>
         </div>
 
+        {!canModeratePhotos ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Вы можете просматривать фото. Удаление доступно только admin и moderator.
+          </div>
+        ) : null}
+
         {photos.length === 0 ? (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
             У вакансии пока нет фото.
@@ -383,14 +396,20 @@ export default function AdminVacancyDetailPage({
                       ) : null}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => deleteVacancyPhoto(photo.id)}
-                      disabled={photoDeletingId === photo.id}
-                      className="w-full rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {photoDeletingId === photo.id ? "Удаляем..." : "Удалить фото"}
-                    </button>
+                    {canModeratePhotos ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteVacancyPhoto(photo.id)}
+                        disabled={photoDeletingId === photo.id}
+                        className="w-full rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {photoDeletingId === photo.id ? "Удаляем..." : "Удалить фото"}
+                      </button>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 px-3 py-2 text-center text-sm text-slate-500">
+                        Только просмотр
+                      </div>
+                    )}
                   </div>
                 </div>
               );

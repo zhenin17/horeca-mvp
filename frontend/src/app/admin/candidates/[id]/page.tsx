@@ -6,6 +6,7 @@ import { apiFetch, getAccessToken, normalizeMediaUrl } from "@/lib/api";
 import { formatReadyToStart, formatSalary } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
 import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 type CandidateDashboardItem = {
   match_id: number;
@@ -141,6 +142,7 @@ export default function AdminCandidateDetailPage({
 }) {
   const { id } = use(params);
 
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [dashboard, setDashboard] = useState<CandidateDashboard | null>(null);
   const [reliability, setReliability] = useState<CandidateReliability | null>(null);
@@ -155,12 +157,14 @@ export default function AdminCandidateDetailPage({
 
     try {
       const [
+        currentUserData,
         candidateData,
         dashboardData,
         reliabilityData,
         photosData,
         availabilityData,
       ] = await Promise.all([
+        apiFetch<CurrentUserRead>("/auth/me"),
         apiFetch<CandidateProfile>(`/me/staff/candidates/${id}`),
         apiFetch<CandidateDashboard>(`/me/staff/candidates/${id}/dashboard`),
         apiFetch<CandidateReliability>(`/me/staff/candidates/${id}/reliability`),
@@ -168,6 +172,7 @@ export default function AdminCandidateDetailPage({
         apiFetch<CandidateAvailabilityItem[]>(`/me/staff/candidates/${id}/availability`),
       ]);
 
+      setCurrentUser(currentUserData);
       setCandidate(candidateData);
       setDashboard(dashboardData);
       setReliability(reliabilityData);
@@ -265,6 +270,7 @@ export default function AdminCandidateDetailPage({
   }
 
   const reliabilityScore = getReliabilityScore(reliability);
+  const canModeratePhotos = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
 
   return (
     <main className="px-4 py-6 space-y-6">
@@ -312,6 +318,12 @@ export default function AdminCandidateDetailPage({
           </div>
         </div>
 
+        {!canModeratePhotos ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Вы можете просматривать фото. Удаление доступно только admin и moderator.
+          </div>
+        ) : null}
+
         {photos.length === 0 ? (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
             У кандидата пока нет фото.
@@ -350,14 +362,20 @@ export default function AdminCandidateDetailPage({
                       ) : null}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => deleteCandidatePhoto(photo.id)}
-                      disabled={photoDeletingId === photo.id}
-                      className="w-full rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {photoDeletingId === photo.id ? "Удаляем..." : "Удалить фото"}
-                    </button>
+                    {canModeratePhotos ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteCandidatePhoto(photo.id)}
+                        disabled={photoDeletingId === photo.id}
+                        className="w-full rounded-xl border border-red-200 px-3 py-2 text-sm text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {photoDeletingId === photo.id ? "Удаляем..." : "Удалить фото"}
+                      </button>
+                    ) : (
+                      <div className="rounded-xl bg-slate-50 px-3 py-2 text-center text-sm text-slate-500">
+                        Только просмотр
+                      </div>
+                    )}
                   </div>
                 </div>
               );
