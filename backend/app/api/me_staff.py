@@ -1,94 +1,293 @@
-from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session, selectinload
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-
-from app.api.app_public import router as app_public_router
-from app.api.auth import router as auth_router
-from app.api.candidates import router as candidates_router
-from app.api.employers import router as employers_router
-from app.api.funnel_events import router as funnel_events_router
-from app.api.me_candidate import router as me_candidate_router
-from app.api.me_candidate_availability import router as me_candidate_availability_router
-from app.api.me_candidate_dashboard import router as me_candidate_dashboard_router
-from app.api.me_candidate_matches import router as me_candidate_matches_router
-from app.api.me_candidate_reliability import router as me_candidate_reliability_router
-from app.api.me_candidate_vacancies import router as me_candidate_vacancies_router
-from app.api.me_employer import router as me_employer_router
-from app.api.me_employer_matches import router as me_employer_matches_router
-from app.api.me_employer_vacancies import router as me_employer_vacancies_router
-from app.api.me_staff import router as me_staff_router
-from app.api.shortlists import router as shortlists_router
-from app.api.telegram import router as telegram_router
-from app.api.vacancies import router as vacancies_router
-from app.api.vacancy_candidate_matches import router as matches_router
-from app.core.config import settings
-from app.core.db import check_db_connection
-
-app = FastAPI(
-    title=settings.app_name,
-    root_path="/api",
-    docs_url="/docs" if settings.enable_docs else None,
-    redoc_url="/redoc" if settings.enable_docs else None,
-    openapi_url="/openapi.json" if settings.enable_docs else None,
+from app.core.db import get_db
+from app.dependencies.auth import require_staff
+from app.models.candidate import Candidate
+from app.models.candidate_availability import CandidateAvailability
+from app.models.candidate_photo import CandidatePhoto
+from app.models.funnel_event import FunnelEvent
+from app.models.vacancy import Vacancy
+from app.models.vacancy_candidate_match import VacancyCandidateMatch
+from app.models.vacancy_photo import VacancyPhoto
+from app.schemas.candidate import (
+    CandidateAvailabilityRead,
+    CandidatePhotoRead,
+    CandidateRead,
 )
+from app.schemas.candidate_dashboard import CandidateDashboardRead
+from app.schemas.funnel_event import FunnelEventRead
+from app.schemas.reliability import CandidateReliabilityRead
+from app.schemas.vacancy import VacancyPhotoRead, VacancyRead
+from app.schemas.vacancy_candidate_match import VacancyCandidateMatchWithCandidateRead
+from app.services.auth import CurrentUserContext
+from app.services.reliability import calculate_candidate_reliability
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.allowed_cors_origins_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+router = APIRouter(prefix="/me/staff", tags=["Me Staff"])
+
+
+def get_candidate_or_404(candidate_id: int, db: Session) -> Candidate:
+    candidate = (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .filter(Candidate.id == candidate_id)
+        .first()
+    )
+
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    return candidate
+
+
+def get_vacancy_or_404(vacancy_id: int, db: Session) -> Vacancy:
+    vacancy = (
+        db.query(Vacancy)
+        .options(selectinload(Vacancy.photos))
+        .filter(Vacancy.id == vacancy_id)
+        .first()
+    )
+
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    return vacancy
+
+
+@router.get("/candidates", response_model=list[CandidateRead])
+def list_staff_candidates(
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(Candidate)
+        .options(selectinload(Candidate.photos))
+        .order_by(Candidate.id.desc())
+        .all()
+    )
+
+
+@router.get("/candidates/{candidate_id}", response_model=CandidateRead)
+def get_staff_candidate(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return get_candidate_or_404(candidate_id, db)
+
+
+@router.get("/candidates/{candidate_id}/photos", response_model=list[CandidatePhotoRead])
+def list_staff_candidate_photos(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    get_candidate_or_404(candidate_id, db)
+
+    return (
+        db.query(CandidatePhoto)
+        .filter(CandidatePhoto.candidate_id == candidate_id)
+        .order_by(
+            CandidatePhoto.is_cover.desc(),
+            CandidatePhoto.sort_order.asc(),
+            CandidatePhoto.id.asc(),
+        )
+        .all()
+    )
+
+
+@router.get(
+    "/candidates/{candidate_id}/availability",
+    response_model=list[CandidateAvailabilityRead],
 )
+def list_staff_candidate_availability(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    get_candidate_or_404(candidate_id, db)
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-@app.get("/uploads/{file_path:path}", include_in_schema=False)
-def serve_upload(file_path: str):
-    target = UPLOADS_DIR / file_path
-
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
-
-    return FileResponse(target)
-
-
-app.include_router(auth_router)
-app.include_router(me_candidate_router)
-app.include_router(me_candidate_availability_router)
-app.include_router(me_candidate_dashboard_router)
-app.include_router(me_candidate_matches_router)
-app.include_router(me_candidate_reliability_router)
-app.include_router(me_candidate_vacancies_router)
-app.include_router(me_employer_router)
-app.include_router(me_employer_matches_router)
-app.include_router(me_employer_vacancies_router)
-app.include_router(me_staff_router)
-
-app.include_router(app_public_router)
-app.include_router(candidates_router)
-app.include_router(employers_router)
-app.include_router(vacancies_router)
-app.include_router(funnel_events_router)
-app.include_router(matches_router)
-app.include_router(shortlists_router)
-app.include_router(telegram_router)
+    return (
+        db.query(CandidateAvailability)
+        .filter(CandidateAvailability.candidate_id == candidate_id)
+        .order_by(
+            CandidateAvailability.available_date.asc(),
+            CandidateAvailability.id.asc(),
+        )
+        .all()
+    )
 
 
-@app.get("/")
-def read_root():
-    return {"status": "ok", "service": "horeca-mvp-api"}
+@router.get(
+    "/candidates/{candidate_id}/dashboard",
+    response_model=CandidateDashboardRead,
+)
+def get_staff_candidate_dashboard(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    candidate = get_candidate_or_404(candidate_id, db)
 
+    matches = (
+        db.query(VacancyCandidateMatch, Vacancy)
+        .join(Vacancy, Vacancy.id == VacancyCandidateMatch.vacancy_id)
+        .filter(VacancyCandidateMatch.candidate_id == candidate_id)
+        .order_by(VacancyCandidateMatch.id.desc())
+        .all()
+    )
 
-@app.get("/health")
-def healthcheck():
-    db_ok = check_db_connection()
-    return {
-        "status": "ok",
-        "service": "horeca-mvp-api",
-        "database": "ok" if db_ok else "error",
+    items = []
+    for match, vacancy in matches:
+        items.append(
+            {
+                "match_id": match.id,
+                "vacancy_id": vacancy.id,
+                "employer_id": match.employer_id,
+                "role": vacancy.role,
+                "venue_name": vacancy.venue_name,
+                "city": vacancy.city,
+                "district": vacancy.district,
+                "match_score": match.match_score,
+                "status": match.status,
+                "comment": match.comment,
+            }
+        )
+
+    total_matches = len(items)
+    active_statuses = {
+        "shortlist",
+        "sent",
+        "viewed",
+        "invited",
+        "interviewed",
+        "offered",
+        "confirmed",
     }
+
+    active_matches = len([item for item in items if item["status"] in active_statuses])
+    hired_matches = len([item for item in items if item["status"] in {"hired", "worked"}])
+    rejected_matches = len(
+        [
+            item
+            for item in items
+            if item["status"] in {"rejected", "no_show", "cancelled"}
+        ]
+    )
+
+    return {
+        "candidate_id": candidate.id,
+        "full_name": candidate.full_name,
+        "primary_role": candidate.primary_role,
+        "city": candidate.city,
+        "district": candidate.district,
+        "ready_to_start": candidate.ready_to_start,
+        "total_matches": total_matches,
+        "active_matches": active_matches,
+        "hired_matches": hired_matches,
+        "rejected_matches": rejected_matches,
+        "items": items,
+    }
+
+
+@router.get(
+    "/candidates/{candidate_id}/reliability",
+    response_model=CandidateReliabilityRead,
+)
+def get_staff_candidate_reliability(
+    candidate_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    candidate = get_candidate_or_404(candidate_id, db)
+
+    events = (
+        db.query(FunnelEvent)
+        .filter(FunnelEvent.candidate_id == candidate_id)
+        .all()
+    )
+
+    summary = calculate_candidate_reliability(events)
+
+    return {
+        "candidate_id": candidate.id,
+        **summary,
+    }
+
+
+@router.get("/vacancies", response_model=list[VacancyRead])
+def list_staff_vacancies(
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(Vacancy)
+        .options(selectinload(Vacancy.photos))
+        .order_by(Vacancy.id.desc())
+        .all()
+    )
+
+
+@router.get("/vacancies/{vacancy_id}", response_model=VacancyRead)
+def get_staff_vacancy(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return get_vacancy_or_404(vacancy_id, db)
+
+
+@router.get("/vacancies/{vacancy_id}/photos", response_model=list[VacancyPhotoRead])
+def list_staff_vacancy_photos(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    get_vacancy_or_404(vacancy_id, db)
+
+    return (
+        db.query(VacancyPhoto)
+        .filter(VacancyPhoto.vacancy_id == vacancy_id)
+        .order_by(
+            VacancyPhoto.is_cover.desc(),
+            VacancyPhoto.sort_order.asc(),
+            VacancyPhoto.id.asc(),
+        )
+        .all()
+    )
+
+
+@router.get("/matches", response_model=list[VacancyCandidateMatchWithCandidateRead])
+def list_staff_matches(
+    vacancy_id: int | None = None,
+    candidate_id: int | None = None,
+    employer_id: int | None = None,
+    status: str | None = None,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    query = db.query(VacancyCandidateMatch).options(
+        selectinload(VacancyCandidateMatch.candidate).selectinload(Candidate.photos)
+    )
+
+    if vacancy_id is not None:
+        query = query.filter(VacancyCandidateMatch.vacancy_id == vacancy_id)
+
+    if candidate_id is not None:
+        query = query.filter(VacancyCandidateMatch.candidate_id == candidate_id)
+
+    if employer_id is not None:
+        query = query.filter(VacancyCandidateMatch.employer_id == employer_id)
+
+    if status is not None:
+        query = query.filter(VacancyCandidateMatch.status == status)
+
+    return query.order_by(VacancyCandidateMatch.id.desc()).all()
+
+
+@router.get("/events", response_model=list[FunnelEventRead])
+def list_staff_events(
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    return db.query(FunnelEvent).order_by(FunnelEvent.id.desc()).all()

@@ -18,6 +18,7 @@ from app.api.me_candidate_vacancies import router as me_candidate_vacancies_rout
 from app.api.me_employer import router as me_employer_router
 from app.api.me_employer_matches import router as me_employer_matches_router
 from app.api.me_employer_vacancies import router as me_employer_vacancies_router
+from app.api.me_staff import router as me_staff_router
 from app.api.shortlists import router as shortlists_router
 from app.api.telegram import router as telegram_router
 from app.api.vacancies import router as vacancies_router
@@ -66,7 +67,7 @@ app.include_router(me_candidate_vacancies_router)
 app.include_router(me_employer_router)
 app.include_router(me_employer_matches_router)
 app.include_router(me_employer_vacancies_router)
-
+app.include_router(me_staff_router)
 app.include_router(app_public_router)
 app.include_router(candidates_router)
 app.include_router(employers_router)
