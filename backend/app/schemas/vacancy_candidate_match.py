@@ -3,6 +3,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.schemas.candidate import CandidateRead
+from app.schemas.vacancy import VacancyRead
 
 
 class VacancyCandidateMatchCreate(BaseModel):
@@ -20,6 +21,13 @@ class VacancyCandidateMatchUpdate(BaseModel):
     comment: Optional[str] = None
 
 
+class CandidateEmployerContactRead(BaseModel):
+    company_name: Optional[str] = None
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    telegram_username: Optional[str] = None
+
+
 class VacancyCandidateMatchRead(BaseModel):
     id: int
     candidate_id: int
@@ -28,6 +36,21 @@ class VacancyCandidateMatchRead(BaseModel):
     match_score: Optional[int] = None
     status: str
     comment: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class VacancyCandidateMatchWithVacancyRead(BaseModel):
+    id: int
+    candidate_id: int
+    employer_id: int
+    vacancy_id: int
+    match_score: Optional[int] = None
+    status: str
+    comment: Optional[str] = None
+    vacancy: Optional[VacancyRead] = None
+    employer_contact: Optional[CandidateEmployerContactRead] = None
 
     class Config:
         from_attributes = True

@@ -57,8 +57,16 @@ type MatchItem = {
   comment?: string | null;
 };
 
+type EmployerContact = {
+  company_name?: string | null;
+  contact_name?: string | null;
+  phone?: string | null;
+  telegram_username?: string | null;
+};
+
 type EnrichedMatchItem = MatchItem & {
   vacancy?: VacancyItem | null;
+  employer_contact?: EmployerContact | null;
 };
 
 type MatchFilter = "all" | "unseen" | "viewed" | "in_work" | "finished";
@@ -194,6 +202,34 @@ function normalizeVacancyItem(raw: unknown): VacancyItem | null {
   };
 }
 
+function normalizeEmployerContact(raw: unknown): EmployerContact | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+
+  const objectValue = raw as Record<string, unknown>;
+
+  return {
+    company_name:
+      objectValue.company_name === null || objectValue.company_name === undefined
+        ? null
+        : String(objectValue.company_name),
+    contact_name:
+      objectValue.contact_name === null || objectValue.contact_name === undefined
+        ? null
+        : String(objectValue.contact_name),
+    phone:
+      objectValue.phone === null || objectValue.phone === undefined
+        ? null
+        : String(objectValue.phone),
+    telegram_username:
+      objectValue.telegram_username === null ||
+      objectValue.telegram_username === undefined
+        ? null
+        : String(objectValue.telegram_username),
+  };
+}
+
 function normalizeMatchItem(raw: unknown): EnrichedMatchItem | null {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -202,6 +238,7 @@ function normalizeMatchItem(raw: unknown): EnrichedMatchItem | null {
   const objectValue = raw as Record<string, unknown>;
 
   const nestedVacancy = normalizeVacancyItem(objectValue.vacancy);
+  const employerContact = normalizeEmployerContact(objectValue.employer_contact);
   const id = Number(objectValue.id);
   const candidateId = Number(objectValue.candidate_id);
   const employerId = Number(objectValue.employer_id);
@@ -229,7 +266,36 @@ function normalizeMatchItem(raw: unknown): EnrichedMatchItem | null {
         ? null
         : String(objectValue.comment),
     vacancy: nestedVacancy,
+    employer_contact: employerContact,
   };
+}
+
+function normalizePhoneHref(phone?: string | null) {
+  if (!phone?.trim()) {
+    return null;
+  }
+
+  const cleaned = phone.replace(/[^\d+]/g, "");
+  return cleaned ? `tel:${cleaned}` : null;
+}
+
+function normalizeTelegramHref(username?: string | null) {
+  if (!username?.trim()) {
+    return null;
+  }
+
+  const cleaned = username.trim().replace(/^@/, "");
+  return cleaned ? `https://t.me/${cleaned}` : null;
+}
+
+function hasEmployerContact(contact?: EmployerContact | null) {
+  return Boolean(contact?.phone?.trim() || contact?.telegram_username?.trim());
+}
+
+function shouldShowEmployerContact(status: string) {
+  return ["invited", "contact_opened", "interviewed", "offered", "hired"].includes(
+    status
+  );
 }
 
 function statusLabel(status: string) {
@@ -266,7 +332,7 @@ function statusHint(status: string) {
     case "viewed":
       return "Работодатель уже посмотрел вашу кандидатуру.";
     case "invited":
-      return "По отклику есть движение со стороны работодателя.";
+      return "Работодатель пригласил вас. Свяжитесь с ним удобным способом.";
     case "interviewed":
       return "По вакансии уже идет следующий этап общения.";
     case "offered":
@@ -290,7 +356,7 @@ function nextStepHint(status: string) {
     case "viewed":
       return "Вас уже увидели. Сейчас лучше просто быть на связи.";
     case "invited":
-      return "Лучший следующий шаг — открыть вакансию и следить за развитием контакта.";
+      return "Работодатель пригласил вас. Ниже показаны доступные способы связи.";
     case "interviewed":
       return "Лучше продолжить контакт и не терять темп общения.";
     case "offered":
@@ -933,6 +999,13 @@ export default function CandidateMatchesPage() {
           {filteredMatches.map((match) => {
             const vacancy = match.vacancy;
             const score = match.match_score ?? 0;
+            const employerContact = match.employer_contact;
+            const phoneHref = normalizePhoneHref(employerContact?.phone);
+            const telegramHref = normalizeTelegramHref(
+              employerContact?.telegram_username
+            );
+            const contactVisible = shouldShowEmployerContact(match.status);
+            const contactExists = hasEmployerContact(employerContact);
 
             return (
               <article
@@ -1023,6 +1096,79 @@ export default function CandidateMatchesPage() {
                         </div>
                       </div>
                     </div>
+
+                    {contactVisible ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
+                        {contactExists ? (
+                          <>
+                            <div className="font-semibold">
+                              Работодатель пригласил вас. Свяжитесь с ним удобным
+                              способом.
+                            </div>
+
+                            <div className="mt-3 space-y-2">
+                              {employerContact?.company_name ? (
+                                <div>
+                                  Компания:{" "}
+                                  <span className="font-medium">
+                                    {employerContact.company_name}
+                                  </span>
+                                </div>
+                              ) : null}
+
+                              {employerContact?.contact_name ? (
+                                <div>
+                                  Контактное лицо:{" "}
+                                  <span className="font-medium">
+                                    {employerContact.contact_name}
+                                  </span>
+                                </div>
+                              ) : null}
+
+                              {telegramHref ? (
+                                <div>
+                                  Telegram:{" "}
+                                  <a
+                                    href={telegramHref}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-medium underline underline-offset-4"
+                                  >
+                                    @
+                                    {employerContact?.telegram_username?.replace(
+                                      /^@/,
+                                      ""
+                                    )}
+                                  </a>
+                                </div>
+                              ) : null}
+
+                              {phoneHref ? (
+                                <div>
+                                  Телефон:{" "}
+                                  <a
+                                    href={phoneHref}
+                                    className="font-medium underline underline-offset-4"
+                                  >
+                                    {employerContact?.phone}
+                                  </a>
+                                </div>
+                              ) : null}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="font-semibold">
+                              Работодатель пригласил вас, но контакты не указаны.
+                            </div>
+                            <div className="mt-2 leading-6">
+                              Мы уже передали ему ваши данные — ожидайте сообщения
+                              или звонка.
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
 
                     {match.comment ? (
                       <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm text-slate-700">
