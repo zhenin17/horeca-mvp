@@ -1,7 +1,7 @@
 from collections import Counter
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.vacancy_candidate_matches import (
@@ -13,6 +13,7 @@ from app.api.vacancy_candidate_matches import (
 )
 from app.core.db import get_db
 from app.dependencies.auth import require_admin_or_moderator, require_staff
+from app.dependencies.rate_limit import rate_limit_read, rate_limit_staff_action
 from app.models.candidate import Candidate
 from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
@@ -75,8 +76,14 @@ def delete_upload_file_if_local(photo_url: str) -> None:
     if not photo_url.startswith("/uploads/"):
         return
 
+    uploads_root = UPLOADS_DIR.resolve()
     relative_path = photo_url.removeprefix("/uploads/")
-    file_path = UPLOADS_DIR / relative_path
+    file_path = (UPLOADS_DIR / relative_path).resolve()
+
+    try:
+        file_path.relative_to(uploads_root)
+    except ValueError:
+        return
 
     if file_path.exists() and file_path.is_file():
         file_path.unlink()
@@ -114,9 +121,12 @@ def apply_staff_status_transition(
 
 @router.get("/candidates", response_model=list[CandidateRead])
 def list_staff_candidates(
+    request: Request,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     return (
         db.query(Candidate)
         .options(selectinload(Candidate.photos))
@@ -127,19 +137,25 @@ def list_staff_candidates(
 
 @router.get("/candidates/{candidate_id}", response_model=CandidateRead)
 def get_staff_candidate(
+    request: Request,
     candidate_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     return get_candidate_or_404(candidate_id, db)
 
 
 @router.get("/candidates/{candidate_id}/photos", response_model=list[CandidatePhotoRead])
 def list_staff_candidate_photos(
+    request: Request,
     candidate_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     get_candidate_or_404(candidate_id, db)
 
     return (
@@ -156,11 +172,14 @@ def list_staff_candidate_photos(
 
 @router.delete("/candidates/{candidate_id}/photos/{photo_id}")
 def delete_staff_candidate_photo(
+    request: Request,
     candidate_id: int,
     photo_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     get_candidate_or_404(candidate_id, db)
 
     photo = (
@@ -186,10 +205,13 @@ def delete_staff_candidate_photo(
     response_model=list[CandidateAvailabilityRead],
 )
 def list_staff_candidate_availability(
+    request: Request,
     candidate_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     get_candidate_or_404(candidate_id, db)
 
     return (
@@ -208,10 +230,13 @@ def list_staff_candidate_availability(
     response_model=CandidateDashboardRead,
 )
 def get_staff_candidate_dashboard(
+    request: Request,
     candidate_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     candidate = get_candidate_or_404(candidate_id, db)
 
     matches = (
@@ -280,10 +305,13 @@ def get_staff_candidate_dashboard(
     response_model=CandidateReliabilityRead,
 )
 def get_staff_candidate_reliability(
+    request: Request,
     candidate_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     candidate = get_candidate_or_404(candidate_id, db)
 
     events = (
@@ -302,9 +330,12 @@ def get_staff_candidate_reliability(
 
 @router.get("/vacancies", response_model=list[VacancyRead])
 def list_staff_vacancies(
+    request: Request,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     return (
         db.query(Vacancy)
         .options(selectinload(Vacancy.photos))
@@ -315,10 +346,13 @@ def list_staff_vacancies(
 
 @router.get("/vacancies/{vacancy_id}", response_model=VacancyRead)
 def get_staff_vacancy(
+    request: Request,
     vacancy_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     return get_vacancy_or_404(vacancy_id, db)
 
 
@@ -327,10 +361,13 @@ def get_staff_vacancy(
     response_model=VacancyShortlistRead,
 )
 def get_staff_vacancy_shortlist(
+    request: Request,
     vacancy_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     vacancy = get_vacancy_or_404(vacancy_id, db)
 
     matches = (
@@ -357,10 +394,13 @@ def get_staff_vacancy_shortlist(
     response_model=VacancyFunnelRead,
 )
 def get_staff_vacancy_funnel(
+    request: Request,
     vacancy_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     vacancy = get_vacancy_or_404(vacancy_id, db)
 
     matches = (
@@ -382,10 +422,13 @@ def get_staff_vacancy_funnel(
 
 @router.get("/vacancies/{vacancy_id}/photos", response_model=list[VacancyPhotoRead])
 def list_staff_vacancy_photos(
+    request: Request,
     vacancy_id: int,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     get_vacancy_or_404(vacancy_id, db)
 
     return (
@@ -402,11 +445,14 @@ def list_staff_vacancy_photos(
 
 @router.delete("/vacancies/{vacancy_id}/photos/{photo_id}")
 def delete_staff_vacancy_photo(
+    request: Request,
     vacancy_id: int,
     photo_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     get_vacancy_or_404(vacancy_id, db)
 
     photo = (
@@ -429,11 +475,14 @@ def delete_staff_vacancy_photo(
 
 @router.patch("/vacancies/{vacancy_id}/status", response_model=VacancyRead)
 def update_staff_vacancy_status(
+    request: Request,
     vacancy_id: int,
     status_value: str = Body(..., embed=True, alias="status"),
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     allowed_statuses = {"new", "in_progress", "closed", "archived"}
 
     if status_value not in allowed_statuses:
@@ -450,6 +499,7 @@ def update_staff_vacancy_status(
 
 @router.get("/matches", response_model=list[VacancyCandidateMatchWithCandidateRead])
 def list_staff_matches(
+    request: Request,
     vacancy_id: int | None = None,
     candidate_id: int | None = None,
     employer_id: int | None = None,
@@ -457,6 +507,8 @@ def list_staff_matches(
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     query = db.query(VacancyCandidateMatch).options(
         selectinload(VacancyCandidateMatch.candidate).selectinload(Candidate.photos)
     )
@@ -478,100 +530,133 @@ def list_staff_matches(
 
 @router.post("/matches/{match_id}/send", response_model=VacancyCandidateMatchRead)
 def staff_send_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "sent", db)
 
 
 @router.post("/matches/{match_id}/view", response_model=VacancyCandidateMatchRead)
 def staff_view_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "viewed", db)
 
 
 @router.post("/matches/{match_id}/invite", response_model=VacancyCandidateMatchRead)
 def staff_invite_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "invited", db)
 
 
 @router.post("/matches/{match_id}/confirm", response_model=VacancyCandidateMatchRead)
 def staff_confirm_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "confirmed", db)
 
 
 @router.post("/matches/{match_id}/worked", response_model=VacancyCandidateMatchRead)
 def staff_worked_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "worked", db)
 
 
 @router.post("/matches/{match_id}/cancel", response_model=VacancyCandidateMatchRead)
 def staff_cancel_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "cancelled", db)
 
 
 @router.post("/matches/{match_id}/interview", response_model=VacancyCandidateMatchRead)
 def staff_interview_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "interviewed", db)
 
 
 @router.post("/matches/{match_id}/hire", response_model=VacancyCandidateMatchRead)
 def staff_hire_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "hired", db)
 
 
 @router.post("/matches/{match_id}/reject", response_model=VacancyCandidateMatchRead)
 def staff_reject_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "rejected", db)
 
 
 @router.post("/matches/{match_id}/no-show", response_model=VacancyCandidateMatchRead)
 def staff_no_show_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     return apply_staff_status_transition(match_id, "no_show", db)
 
 
 @router.post("/matches/{match_id}/reopen", response_model=VacancyCandidateMatchRead)
 def staff_reopen_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(require_admin_or_moderator),
     db: Session = Depends(get_db),
 ):
+    rate_limit_staff_action(request, user_id=current_user.telegram_user_id)
+
     match = get_match_or_404(match_id, db)
 
     old_status = match.status
@@ -594,7 +679,10 @@ def staff_reopen_match(
 
 @router.get("/events", response_model=list[FunnelEventRead])
 def list_staff_events(
+    request: Request,
     current_user: CurrentUserContext = Depends(require_staff),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     return db.query(FunnelEvent).order_by(FunnelEvent.id.desc()).all()
