@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.rate_limit import rate_limit_read, rate_limit_user_action
 from app.models.funnel_event import FunnelEvent
 from app.models.vacancy import Vacancy
 from app.models.vacancy_candidate_match import VacancyCandidateMatch
@@ -155,10 +156,13 @@ def require_match_admin_or_participant(
 
 @router.post("/", response_model=VacancyCandidateMatchRead)
 def create_match(
+    request: Request,
     payload: VacancyCandidateMatchCreate,
     current_user: CurrentUserContext = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     match = VacancyCandidateMatch(
         candidate_id=payload.candidate_id,
         employer_id=payload.employer_id,
@@ -190,6 +194,7 @@ def create_match(
 
 @router.get("/", response_model=list[VacancyCandidateMatchWithCandidateRead])
 def list_matches(
+    request: Request,
     vacancy_id: int | None = None,
     candidate_id: int | None = None,
     employer_id: int | None = None,
@@ -197,6 +202,8 @@ def list_matches(
     current_user: CurrentUserContext = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    rate_limit_read(request, user_id=current_user.telegram_user_id)
+
     query = db.query(VacancyCandidateMatch)
 
     if vacancy_id is not None:
@@ -213,11 +220,14 @@ def list_matches(
 
 @router.patch("/{match_id}", response_model=VacancyCandidateMatchRead)
 def update_match(
+    request: Request,
     match_id: int,
     payload: VacancyCandidateMatchUpdate,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     match = get_match_or_404(match_id, db)
     require_match_admin_or_employer_owner(match, current_user)
 
@@ -291,100 +301,133 @@ def apply_status_transition(
 
 @router.post("/{match_id}/send", response_model=VacancyCandidateMatchRead)
 def send_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "sent", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/view", response_model=VacancyCandidateMatchRead)
 def view_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "viewed", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/invite", response_model=VacancyCandidateMatchRead)
 def invite_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "invited", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/confirm", response_model=VacancyCandidateMatchRead)
 def confirm_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "confirmed", current_user, db, "participant_admin")
 
 
 @router.post("/{match_id}/worked", response_model=VacancyCandidateMatchRead)
 def worked_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "worked", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/cancel", response_model=VacancyCandidateMatchRead)
 def cancel_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "cancelled", current_user, db, "participant_admin")
 
 
 @router.post("/{match_id}/interview", response_model=VacancyCandidateMatchRead)
 def interview_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "interviewed", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/hire", response_model=VacancyCandidateMatchRead)
 def hire_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "hired", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/reject", response_model=VacancyCandidateMatchRead)
 def reject_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "rejected", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/no-show", response_model=VacancyCandidateMatchRead)
 def no_show_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     return apply_status_transition(match_id, "no_show", current_user, db, "employer_admin")
 
 
 @router.post("/{match_id}/reopen", response_model=VacancyCandidateMatchRead)
 def reopen_match(
+    request: Request,
     match_id: int,
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_user_action(request, user_id=current_user.telegram_user_id)
+
     match = get_match_or_404(match_id, db)
     require_match_admin_or_employer_owner(match, current_user)
 
