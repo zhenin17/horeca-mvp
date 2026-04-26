@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   apiFetch,
+  apiPatchJson,
   apiPostJson,
+  normalizeMediaUrl,
   uploadVacancyPhoto,
 } from "@/lib/api";
 import type { CurrentUserRead } from "@/lib/current-user";
@@ -59,6 +61,34 @@ type EmployerItem = {
   telegram_username?: string | null;
   city: string;
   website?: string | null;
+};
+
+type VacancyPhoto = {
+  id: number;
+  vacancy_id: number;
+  photo_url: string;
+  sort_order: number;
+  is_cover: boolean;
+};
+
+type VacancyItem = {
+  id: number;
+  employer_id: number;
+  role: string;
+  venue_name: string;
+  city: string;
+  district?: string | null;
+  salary_text?: string | null;
+  schedule_text?: string | null;
+  needed_start?: string | null;
+  listing_type?: ListingType;
+  shift_date?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  urgent_flag?: boolean;
+  slots_count?: number | null;
+  status: string;
+  photos?: VacancyPhoto[];
 };
 
 function validateForm(form: VacancyForm): FieldErrors {
@@ -125,6 +155,71 @@ function getCreatedVacancyId(data: CreatedVacancyResponse | null | undefined) {
   return null;
 }
 
+function getVacancyCoverPhoto(vacancy?: VacancyItem | null) {
+  if (!vacancy?.photos || vacancy.photos.length === 0) {
+    return null;
+  }
+
+  return (
+    vacancy.photos.find((photo) => photo.is_cover) ||
+    [...vacancy.photos].sort((a, b) => a.sort_order - b.sort_order)[0] ||
+    null
+  );
+}
+
+function normalizeListingType(value?: string | null): ListingType {
+  if (value === "part_time" || value === "shift") {
+    return value;
+  }
+
+  return "job";
+}
+
+function normalizeReadyToStartValue(value?: string | null) {
+  if (!value?.trim()) {
+    return "";
+  }
+
+  const normalized = value.trim().toLowerCase();
+
+  const reverseMap: Record<string, string> = {
+    today: "today",
+    tomorrow: "tomorrow",
+    "3days": "3days",
+    "3_days": "3days",
+    week: "week",
+    next_week: "next_week",
+    сегодня: "today",
+    завтра: "tomorrow",
+    "3 дня": "3days",
+    "в течение 3 дней": "3days",
+    неделя: "week",
+    "в течение недели": "week",
+    "со следующей недели": "next_week",
+  };
+
+  return reverseMap[normalized] || value;
+}
+
+function vacancyToForm(vacancy: VacancyItem): VacancyForm {
+  return {
+    listing_type: normalizeListingType(vacancy.listing_type),
+    role: vacancy.role || "",
+    venue_name: vacancy.venue_name || "",
+    city: vacancy.city || "Санкт-Петербург",
+    district: vacancy.district || "",
+    salary_text: vacancy.salary_text || "",
+    schedule_text: vacancy.schedule_text || "",
+    needed_start: normalizeReadyToStartValue(vacancy.needed_start),
+    shift_date: vacancy.shift_date || "",
+    shift_start_time: vacancy.shift_start_time || "",
+    shift_end_time: vacancy.shift_end_time || "",
+    urgent_flag: Boolean(vacancy.urgent_flag),
+    slots_count: vacancy.slots_count ? String(vacancy.slots_count) : "1",
+    status: vacancy.status || "new",
+  };
+}
+
 function inputClass(hasError?: boolean) {
   return `w-full rounded-2xl border px-4 py-3 text-base outline-none transition ${
     hasError
@@ -175,10 +270,14 @@ function photoButtonClass(disabled?: boolean) {
 
 export default function EmployerCreateVacancyPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const vacancyIdParam = searchParams.get("vacancy_id");
 
   const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
   const [employer, setEmployer] = useState<EmployerItem | null>(null);
   const [bootLoading, setBootLoading] = useState(true);
+  const [editVacancyId, setEditVacancyId] = useState<number | null>(null);
+  const [editingVacancy, setEditingVacancy] = useState<VacancyItem | null>(null);
 
   const [form, setForm] = useState<VacancyForm>({
     listing_type: "job",
@@ -206,6 +305,7 @@ export default function EmployerCreateVacancyPage() {
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState("");
   const [photoErrorText, setPhotoErrorText] = useState("");
 
+  const isEditMode = Boolean(editVacancyId);
   const districtOptions = useMemo(() => getDistrictOptions(form.city), [form.city]);
   const isShift = form.listing_type === "shift";
 
@@ -225,6 +325,30 @@ export default function EmployerCreateVacancyPage() {
 
         const employerData = await apiFetch<EmployerItem>("/me/employer");
         setEmployer(employerData);
+
+        const parsedVacancyId = vacancyIdParam ? Number(vacancyIdParam) : null;
+
+        if (parsedVacancyId && Number.isFinite(parsedVacancyId)) {
+          const vacancies = await apiFetch<VacancyItem[]>("/me/employer/vacancies");
+          const vacancy = (vacancies || []).find((item) => item.id === parsedVacancyId);
+
+          if (!vacancy) {
+            throw new Error("Вакансия не найдена или недоступна для редактирования");
+          }
+
+          setEditVacancyId(vacancy.id);
+          setEditingVacancy(vacancy);
+          setForm(vacancyToForm(vacancy));
+
+          const coverPhoto = getVacancyCoverPhoto(vacancy);
+          setPhotoPreviewUrl(
+            coverPhoto?.photo_url ? normalizeMediaUrl(coverPhoto.photo_url) || "" : ""
+          );
+        } else {
+          setEditVacancyId(null);
+          setEditingVacancy(null);
+          setPhotoPreviewUrl("");
+        }
       } catch (error) {
         console.error(error);
 
@@ -239,7 +363,7 @@ export default function EmployerCreateVacancyPage() {
     }
 
     void bootstrap();
-  }, []);
+  }, [vacancyIdParam]);
 
   useEffect(() => {
     return () => {
@@ -292,6 +416,14 @@ export default function EmployerCreateVacancyPage() {
 
     if (!file) {
       setSelectedPhotoFile(null);
+
+      if (editingVacancy) {
+        const coverPhoto = getVacancyCoverPhoto(editingVacancy);
+        setPhotoPreviewUrl(
+          coverPhoto?.photo_url ? normalizeMediaUrl(coverPhoto.photo_url) || "" : ""
+        );
+      }
+
       return;
     }
 
@@ -324,7 +456,11 @@ export default function EmployerCreateVacancyPage() {
       setFieldErrors(validationErrors);
 
       if (Object.keys(validationErrors).length > 0) {
-        setErrorText("Заполни обязательные поля, чтобы создать вакансию");
+        setErrorText(
+          isEditMode
+            ? "Заполни обязательные поля, чтобы сохранить изменения"
+            : "Заполни обязательные поля, чтобы создать вакансию"
+        );
         return;
       }
 
@@ -367,35 +503,53 @@ export default function EmployerCreateVacancyPage() {
         status: form.status,
       };
 
-      const data = await apiPostJson<CreatedVacancyResponse>(
-        "/me/employer/vacancies",
-        payload
-      );
+      const data =
+        isEditMode && editVacancyId
+          ? await apiPatchJson<CreatedVacancyResponse>(
+              `/me/employer/vacancies/${editVacancyId}`,
+              payload
+            )
+          : await apiPostJson<CreatedVacancyResponse>(
+              "/me/employer/vacancies",
+              payload
+            );
 
-      const createdVacancyId = getCreatedVacancyId(data);
+      const savedVacancyId = getCreatedVacancyId(data) || editVacancyId;
 
-      if (selectedPhotoFile && createdVacancyId) {
+      if (selectedPhotoFile && savedVacancyId) {
         try {
-          await uploadVacancyPhoto(createdVacancyId, selectedPhotoFile);
-          setSuccessText("Вакансия и фото успешно сохранены");
+          await uploadVacancyPhoto(savedVacancyId, selectedPhotoFile);
+          setSuccessText(
+            isEditMode
+              ? "Изменения и фото успешно сохранены"
+              : "Вакансия и фото успешно сохранены"
+          );
         } catch (photoError) {
           console.error(photoError);
 
           if (photoError instanceof Error) {
             setErrorText(
-              `Вакансия создана, но фото не загрузилось: ${photoError.message}`
+              `${isEditMode ? "Изменения сохранены" : "Вакансия создана"}, но фото не загрузилось: ${photoError.message}`
             );
           } else {
-            setErrorText("Вакансия создана, но фото не загрузилось");
+            setErrorText(
+              isEditMode
+                ? "Изменения сохранены, но фото не загрузилось"
+                : "Вакансия создана, но фото не загрузилось"
+            );
           }
 
-          setSuccessText("Вакансия создана");
+          setSuccessText(isEditMode ? "Изменения сохранены" : "Вакансия создана");
         }
       } else {
         setSuccessText(
-          selectedPhotoFile && !createdVacancyId
-            ? "Вакансия создана. Фото пока не удалось привязать автоматически."
-            : "Вакансия успешно создана"
+          selectedPhotoFile && !savedVacancyId
+            ? isEditMode
+              ? "Изменения сохранены. Фото пока не удалось привязать автоматически."
+              : "Вакансия создана. Фото пока не удалось привязать автоматически."
+            : isEditMode
+              ? "Изменения успешно сохранены"
+              : "Вакансия успешно создана"
         );
       }
 
@@ -408,7 +562,9 @@ export default function EmployerCreateVacancyPage() {
       if (error instanceof Error) {
         setErrorText(error.message);
       } else {
-        setErrorText("Не удалось создать вакансию");
+        setErrorText(
+          isEditMode ? "Не удалось сохранить изменения" : "Не удалось создать вакансию"
+        );
       }
     } finally {
       setSaving(false);
@@ -465,11 +621,12 @@ export default function EmployerCreateVacancyPage() {
             <div className="max-w-2xl">
               <p className="text-sm font-medium text-slate-500">Работодатель</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                Создать вакансию
+                {isEditMode ? "Редактировать вакансию" : "Создать вакансию"}
               </h1>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Сначала выбери тип объявления, потом заполни основные поля.
-                Для смены отдельно указываются дата, время и срочность.
+                {isEditMode
+                  ? "Обновите данные вакансии. Изменения будут видны кандидатам после сохранения."
+                  : "Сначала выбери тип объявления, потом заполни основные поля. Для смены отдельно указываются дата, время и срочность."}
               </p>
 
               <div className="mt-4 inline-flex rounded-full bg-white px-3 py-1 text-sm text-slate-600 ring-1 ring-slate-200">
@@ -493,12 +650,15 @@ export default function EmployerCreateVacancyPage() {
             </div>
 
             <div className="mt-2 text-lg font-semibold text-slate-900">
-              Тип объявления влияет на то, как вакансия будет видна кандидату
+              {isEditMode
+                ? "Редактирование обновляет текущую вакансию"
+                : "Тип объявления влияет на то, как вакансия будет видна кандидату"}
             </div>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Если это смена, кандидат должен сразу видеть, что это именно смена,
-              с датой, временем и срочностью.
+              {isEditMode
+                ? "Проверьте роль, точку, город, доход, график и статус перед сохранением."
+                : "Если это смена, кандидат должен сразу видеть, что это именно смена, с датой, временем и срочностью."}
             </p>
           </div>
         </div>
@@ -539,7 +699,7 @@ export default function EmployerCreateVacancyPage() {
                   Фото пока не выбрано
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
-                  Добавьте фото заведения или вакансии
+                  {isEditMode ? "Текущее фото вакансии" : "Добавьте фото заведения или вакансии"}
                 </div>
               </div>
             )}
@@ -564,7 +724,7 @@ export default function EmployerCreateVacancyPage() {
                     disabled={saving}
                     onChange={(e) => handlePhotoChange(e.target.files?.[0] || null)}
                   />
-                  {selectedPhotoFile ? "Изменить фото" : "Добавить фото"}
+                  {selectedPhotoFile || isEditMode ? "Изменить фото" : "Добавить фото"}
                 </label>
 
                 {selectedPhotoFile ? (
@@ -856,7 +1016,11 @@ export default function EmployerCreateVacancyPage() {
             disabled={saving}
             className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? "Сохраняем..." : "Создать вакансию"}
+            {saving
+              ? "Сохраняем..."
+              : isEditMode
+                ? "Сохранить изменения"
+                : "Создать вакансию"}
           </button>
 
           <Link

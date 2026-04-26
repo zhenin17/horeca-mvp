@@ -4,7 +4,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.db import get_db
 from app.dependencies.auth import require_employer
 from app.models.vacancy import Vacancy
-from app.schemas.vacancy import MyEmployerVacancyCreate, VacancyRead
+from app.schemas.vacancy import (
+    MyEmployerVacancyCreate,
+    MyEmployerVacancyUpdate,
+    VacancyRead,
+)
 from app.services.auth import CurrentUserContext
 
 router = APIRouter(prefix="/me/employer", tags=["Me Employer Vacancies"])
@@ -58,6 +62,51 @@ def create_my_employer_vacancy(
     return (
         db.query(Vacancy)
         .options(selectinload(Vacancy.photos))
-        .filter(Vacancy.id == vacancy.id)
+        .filter(
+            Vacancy.id == vacancy.id,
+            Vacancy.employer_id == current_user.employer_id,
+        )
+        .first()
+    )
+
+
+@router.patch("/vacancies/{vacancy_id}", response_model=VacancyRead)
+def update_my_employer_vacancy(
+    vacancy_id: int,
+    payload: MyEmployerVacancyUpdate,
+    current_user: CurrentUserContext = Depends(require_employer),
+    db: Session = Depends(get_db),
+):
+    if not current_user.employer_id:
+        raise HTTPException(status_code=403, detail="Employer profile required")
+
+    vacancy = (
+        db.query(Vacancy)
+        .options(selectinload(Vacancy.photos))
+        .filter(
+            Vacancy.id == vacancy_id,
+            Vacancy.employer_id == current_user.employer_id,
+        )
+        .first()
+    )
+
+    if not vacancy:
+        raise HTTPException(status_code=404, detail="Vacancy not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(vacancy, field, value)
+
+    db.commit()
+    db.refresh(vacancy)
+
+    return (
+        db.query(Vacancy)
+        .options(selectinload(Vacancy.photos))
+        .filter(
+            Vacancy.id == vacancy.id,
+            Vacancy.employer_id == current_user.employer_id,
+        )
         .first()
     )

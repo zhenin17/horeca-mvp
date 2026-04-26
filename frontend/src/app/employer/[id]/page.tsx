@@ -1447,6 +1447,12 @@ export default function EmployerDashboardPage() {
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
+                      <Link
+  href={`/employer/${currentUser.employer_id}/create-vacancies?vacancy_id=${selectedVacancy.id}`}
+  className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+>
+  Редактировать
+</Link>
                         {selectedVacancy.status !== "closed" &&
                         selectedVacancy.status !== "archived" ? (
                           <button

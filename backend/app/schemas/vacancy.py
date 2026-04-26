@@ -59,6 +59,25 @@ class MyEmployerVacancyCreate(BaseModel):
     status: str = "new"
 
 
+class MyEmployerVacancyUpdate(BaseModel):
+    role: Optional[str] = None
+    venue_name: Optional[str] = None
+    city: Optional[str] = None
+    district: Optional[str] = None
+    salary_text: Optional[str] = None
+    schedule_text: Optional[str] = None
+    needed_start: Optional[str] = None
+
+    listing_type: Optional[str] = None
+    shift_date: Optional[str] = None
+    shift_start_time: Optional[str] = None
+    shift_end_time: Optional[str] = None
+    urgent_flag: Optional[bool] = None
+    slots_count: Optional[int] = None
+
+    status: Optional[str] = None
+
+
 class VacancyRead(BaseModel):
     id: int
     employer_id: int
