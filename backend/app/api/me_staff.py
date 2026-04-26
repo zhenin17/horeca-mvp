@@ -1,7 +1,8 @@
+from collections import Counter
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.api.vacancy_candidate_matches import (
     can_transition_to,
@@ -27,6 +28,7 @@ from app.schemas.candidate import (
 from app.schemas.candidate_dashboard import CandidateDashboardRead
 from app.schemas.funnel_event import FunnelEventRead
 from app.schemas.reliability import CandidateReliabilityRead
+from app.schemas.shortlist import VacancyFunnelRead, VacancyShortlistRead
 from app.schemas.vacancy import VacancyPhotoRead, VacancyRead
 from app.schemas.vacancy_candidate_match import (
     VacancyCandidateMatchRead,
@@ -318,6 +320,64 @@ def get_staff_vacancy(
     db: Session = Depends(get_db),
 ):
     return get_vacancy_or_404(vacancy_id, db)
+
+
+@router.get(
+    "/vacancies/{vacancy_id}/shortlist",
+    response_model=VacancyShortlistRead,
+)
+def get_staff_vacancy_shortlist(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    vacancy = get_vacancy_or_404(vacancy_id, db)
+
+    matches = (
+        db.query(VacancyCandidateMatch)
+        .options(joinedload(VacancyCandidateMatch.candidate))
+        .filter(VacancyCandidateMatch.vacancy_id == vacancy_id)
+        .order_by(VacancyCandidateMatch.id.desc())
+        .all()
+    )
+
+    return {
+        "vacancy_id": vacancy.id,
+        "role": vacancy.role,
+        "venue_name": vacancy.venue_name,
+        "city": vacancy.city,
+        "district": vacancy.district,
+        "status": vacancy.status,
+        "matches": matches,
+    }
+
+
+@router.get(
+    "/vacancies/{vacancy_id}/funnel",
+    response_model=VacancyFunnelRead,
+)
+def get_staff_vacancy_funnel(
+    vacancy_id: int,
+    current_user: CurrentUserContext = Depends(require_staff),
+    db: Session = Depends(get_db),
+):
+    vacancy = get_vacancy_or_404(vacancy_id, db)
+
+    matches = (
+        db.query(VacancyCandidateMatch)
+        .filter(VacancyCandidateMatch.vacancy_id == vacancy_id)
+        .all()
+    )
+
+    by_status = dict(Counter(match.status for match in matches))
+
+    return {
+        "vacancy_id": vacancy.id,
+        "role": vacancy.role,
+        "venue_name": vacancy.venue_name,
+        "total_matches": len(matches),
+        "by_status": by_status,
+    }
 
 
 @router.get("/vacancies/{vacancy_id}/photos", response_model=list[VacancyPhotoRead])
