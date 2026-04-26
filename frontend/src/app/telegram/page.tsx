@@ -10,8 +10,10 @@ import {
 } from "@/lib/api";
 import {
   clearActiveRole,
-  CurrentUserRead,
+  type CurrentUserRead,
   getActiveRole,
+  getStaffRoleLabel,
+  isStaffUser,
   setActiveRole,
   syncLegacyIdsFromCurrentUser,
 } from "@/lib/current-user";
@@ -109,6 +111,19 @@ function roleDescription(role: RoleChoice) {
   return "Кабинет работодателя, вакансии и кандидаты.";
 }
 
+function staffRoleHumanLabel(role: string | null) {
+  switch (role) {
+    case "admin":
+      return "Администратор";
+    case "moderator":
+      return "Модератор";
+    case "support":
+      return "Поддержка";
+    default:
+      return "Staff";
+  }
+}
+
 export default function TelegramEntryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -179,7 +194,10 @@ export default function TelegramEntryPage() {
         syncLegacyIdsFromCurrentUser(authData.current_user);
         setCurrentUser(authData.current_user);
 
-        const presetName = [authData.current_user.first_name, authData.current_user.last_name]
+        const presetName = [
+          authData.current_user.first_name,
+          authData.current_user.last_name,
+        ]
           .filter(Boolean)
           .join(" ")
           .trim();
@@ -307,7 +325,8 @@ export default function TelegramEntryPage() {
         city: candidateForm.city.trim(),
         district: candidateForm.district.trim() || null,
         primary_role: candidateForm.primary_role.trim(),
-        horeca_experience_months: Number(candidateForm.horeca_experience_months) || 0,
+        horeca_experience_months:
+          Number(candidateForm.horeca_experience_months) || 0,
         ready_to_start: candidateForm.ready_to_start.trim(),
         expected_income: candidateForm.expected_income.trim() || null,
       });
@@ -398,6 +417,9 @@ export default function TelegramEntryPage() {
     return fullName || currentUser.telegram_username || "Telegram пользователь";
   }, [currentUser]);
 
+  const isStaff = isStaffUser(currentUser);
+  const staffRoleLabel = staffRoleHumanLabel(getStaffRoleLabel(currentUser));
+
   if (loading) {
     return <main className="px-4 py-6">Подключаем Telegram...</main>;
   }
@@ -461,12 +483,16 @@ export default function TelegramEntryPage() {
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm text-slate-700">
                 <div className="font-medium text-slate-900">Кандидат</div>
-                <div className="mt-1">{hasCandidate ? "Профиль уже создан" : "Профиля пока нет"}</div>
+                <div className="mt-1">
+                  {hasCandidate ? "Профиль уже создан" : "Профиля пока нет"}
+                </div>
               </div>
 
               <div className="rounded-2xl bg-slate-50 px-3 py-3 text-sm text-slate-700">
                 <div className="font-medium text-slate-900">Работодатель</div>
-                <div className="mt-1">{hasEmployer ? "Профиль уже создан" : "Профиля пока нет"}</div>
+                <div className="mt-1">
+                  {hasEmployer ? "Профиль уже создан" : "Профиля пока нет"}
+                </div>
               </div>
             </div>
 
@@ -488,6 +514,33 @@ export default function TelegramEntryPage() {
             ) : null}
           </div>
 
+          {isStaff ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+                Staff access
+              </div>
+
+              <div className="mt-2 text-lg font-semibold text-slate-900">
+                Вам доступен staff-раздел
+              </div>
+
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                Роль: <span className="font-medium">{staffRoleLabel}</span>. Этот блок
+                виден только staff-пользователям, которых backend определил через
+                <span className="font-medium"> /auth/me</span>.
+              </p>
+
+              <div className="mt-4">
+                <Link
+                  href="/admin/vacancies"
+                  className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                >
+                  Открыть админку
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
           {!consentAccepted ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white/90 p-4">
               <div className="text-sm font-semibold text-slate-900">
@@ -500,7 +553,10 @@ export default function TelegramEntryPage() {
                   checked={consentChecked}
                   onChange={(e) => {
                     setConsentChecked(e.target.checked);
-                    if (errorText === "Чтобы продолжить, подтвердите согласие с документами.") {
+                    if (
+                      errorText ===
+                      "Чтобы продолжить, подтвердите согласие с документами."
+                    ) {
                       setErrorText("");
                     }
                   }}
@@ -587,7 +643,9 @@ export default function TelegramEntryPage() {
           {(hasCandidate || hasEmployer) && (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Войти в существующий профиль</h2>
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Войти в существующий профиль
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Выберите роль, в которой хотите открыть приложение сейчас.
                 </p>
@@ -596,7 +654,9 @@ export default function TelegramEntryPage() {
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 {hasCandidate ? (
                   <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-lg font-semibold text-slate-900">Кандидат</div>
+                    <div className="text-lg font-semibold text-slate-900">
+                      Кандидат
+                    </div>
                     <div className="mt-2 text-sm leading-6 text-slate-600">
                       {roleDescription("candidate")}
                     </div>
@@ -616,7 +676,9 @@ export default function TelegramEntryPage() {
 
                 {hasEmployer ? (
                   <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-lg font-semibold text-slate-900">Работодатель</div>
+                    <div className="text-lg font-semibold text-slate-900">
+                      Работодатель
+                    </div>
                     <div className="mt-2 text-sm leading-6 text-slate-600">
                       {roleDescription("employer")}
                     </div>
@@ -640,7 +702,9 @@ export default function TelegramEntryPage() {
           {(!hasCandidate || !hasEmployer) && (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Добавить роль</h2>
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Добавить роль
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Можно пользоваться приложением сразу в двух ролях.
                 </p>
@@ -649,7 +713,9 @@ export default function TelegramEntryPage() {
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 {!hasCandidate ? (
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="text-lg font-semibold text-slate-900">Кандидат</div>
+                    <div className="text-lg font-semibold text-slate-900">
+                      Кандидат
+                    </div>
                     <div className="mt-2 text-sm leading-6 text-slate-600">
                       Смотреть вакансии, откликаться и следить за статусами.
                     </div>
@@ -674,7 +740,9 @@ export default function TelegramEntryPage() {
 
                 {!hasEmployer ? (
                   <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-                    <div className="text-lg font-semibold text-slate-900">Работодатель</div>
+                    <div className="text-lg font-semibold text-slate-900">
+                      Работодатель
+                    </div>
                     <div className="mt-2 text-sm leading-6 text-slate-600">
                       Смотреть кандидатов, работать со статусами и вакансиями.
                     </div>
@@ -705,7 +773,9 @@ export default function TelegramEntryPage() {
       {createRole === "candidate" ? (
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-slate-900">Создать профиль кандидата</h2>
+            <h2 className="text-xl font-semibold text-slate-900">
+              Создать профиль кандидата
+            </h2>
             <button
               type="button"
               onClick={() => setCreateRole(null)}
@@ -730,7 +800,9 @@ export default function TelegramEntryPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Телефон *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Телефон *
+              </label>
               <input
                 value={candidateForm.phone}
                 onChange={(e) =>
@@ -741,7 +813,9 @@ export default function TelegramEntryPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Город *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Город *
+              </label>
               <input
                 value={candidateForm.city}
                 onChange={(e) =>
@@ -752,7 +826,9 @@ export default function TelegramEntryPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Район</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Район
+              </label>
               <input
                 value={candidateForm.district}
                 onChange={(e) =>
@@ -855,7 +931,9 @@ export default function TelegramEntryPage() {
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Компания *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Компания *
+              </label>
               <input
                 value={employerForm.company_name}
                 onChange={(e) =>
@@ -879,7 +957,9 @@ export default function TelegramEntryPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Телефон *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Телефон *
+              </label>
               <input
                 value={employerForm.phone}
                 onChange={(e) =>
@@ -890,7 +970,9 @@ export default function TelegramEntryPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Город *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Город *
+              </label>
               <input
                 value={employerForm.city}
                 onChange={(e) =>

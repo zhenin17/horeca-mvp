@@ -298,6 +298,17 @@ function shouldShowEmployerContact(status: string) {
   );
 }
 
+function buildCandidateToEmployerMessage(
+  candidate: CandidateItem | null,
+  vacancy?: VacancyItem | null
+) {
+  const candidateName = candidate?.full_name?.trim() || "кандидат";
+  const role = vacancy?.role?.trim() || "вакансии";
+  const venueName = vacancy?.venue_name?.trim() || "вашем заведении";
+
+  return `Здравствуйте! Это ${candidateName}, я откликался(ась) через сервис Хабсти. Вы пригласили меня по вакансии «${role}» в «${venueName}». Готов(а) обсудить детали.`;
+}
+
 function statusLabel(status: string) {
   switch (status) {
     case "shortlist":
@@ -356,6 +367,7 @@ function nextStepHint(status: string) {
     case "viewed":
       return "Вас уже увидели. Сейчас лучше просто быть на связи.";
     case "invited":
+    case "contact_opened":
       return "Работодатель пригласил вас. Ниже показаны доступные способы связи.";
     case "interviewed":
       return "Лучше продолжить контакт и не терять темп общения.";
@@ -385,7 +397,7 @@ function belongsToFilter(status: string, filter: MatchFilter) {
   }
 
   if (filter === "in_work") {
-    return ["invited", "interviewed", "offered"].includes(status);
+    return ["invited", "contact_opened", "interviewed", "offered"].includes(status);
   }
 
   if (filter === "finished") {
@@ -458,7 +470,7 @@ function listingTypeFilterHint(filter: ListingTypeFilter) {
 }
 
 function cardAccentClasses(status: string) {
-  if (status === "invited") {
+  if (status === "invited" || status === "contact_opened") {
     return "border-emerald-200 bg-emerald-50/70";
   }
 
@@ -478,7 +490,12 @@ function cardAccentClasses(status: string) {
 }
 
 function statusPillClasses(status: string) {
-  if (status === "invited" || status === "offered" || status === "hired") {
+  if (
+    status === "invited" ||
+    status === "contact_opened" ||
+    status === "offered" ||
+    status === "hired"
+  ) {
     return "border border-emerald-200 bg-emerald-100 text-emerald-900";
   }
 
@@ -687,6 +704,21 @@ export default function CandidateMatchesPage() {
     useState<ListingTypeFilter>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [isTelegram, setIsTelegram] = useState(false);
+  const [copiedMatchId, setCopiedMatchId] = useState<number | null>(null);
+
+  async function copyMessage(matchId: number, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMatchId(matchId);
+
+      window.setTimeout(() => {
+        setCopiedMatchId((current) => (current === matchId ? null : current));
+      }, 1800);
+    } catch (error) {
+      console.error(error);
+      setErrorText("Не удалось скопировать сообщение");
+    }
+  }
 
   async function loadData() {
     try {
@@ -763,7 +795,9 @@ export default function CandidateMatchesPage() {
         .length,
       viewed: matches.filter((item) => item.status === "viewed").length,
       inWork: matches.filter((item) =>
-        ["invited", "interviewed", "offered"].includes(item.status)
+        ["invited", "contact_opened", "interviewed", "offered"].includes(
+          item.status
+        )
       ).length,
       finished: matches.filter((item) =>
         ["hired", "rejected", "no_show"].includes(item.status)
@@ -1006,6 +1040,10 @@ export default function CandidateMatchesPage() {
             );
             const contactVisible = shouldShowEmployerContact(match.status);
             const contactExists = hasEmployerContact(employerContact);
+            const preparedMessage = buildCandidateToEmployerMessage(
+              candidate,
+              vacancy
+            );
 
             return (
               <article
@@ -1106,6 +1144,10 @@ export default function CandidateMatchesPage() {
                               способом.
                             </div>
 
+                            <div className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-emerald-100">
+                              {preparedMessage}
+                            </div>
+
                             <div className="mt-3 space-y-2">
                               {employerContact?.company_name ? (
                                 <div>
@@ -1134,11 +1176,7 @@ export default function CandidateMatchesPage() {
                                     rel="noreferrer"
                                     className="font-medium underline underline-offset-4"
                                   >
-                                    @
-                                    {employerContact?.telegram_username?.replace(
-                                      /^@/,
-                                      ""
-                                    )}
+                                    @{employerContact?.telegram_username?.replace(/^@/, "")}
                                   </a>
                                 </div>
                               ) : null}
@@ -1153,6 +1191,38 @@ export default function CandidateMatchesPage() {
                                     {employerContact?.phone}
                                   </a>
                                 </div>
+                              ) : null}
+                            </div>
+
+                            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => void copyMessage(match.id, preparedMessage)}
+                                className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                              >
+                                {copiedMatchId === match.id
+                                  ? "Сообщение скопировано"
+                                  : "Скопировать сообщение"}
+                              </button>
+
+                              {telegramHref ? (
+                                <a
+                                  href={telegramHref}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
+                                >
+                                  Написать в Telegram
+                                </a>
+                              ) : null}
+
+                              {phoneHref ? (
+                                <a
+                                  href={phoneHref}
+                                  className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                >
+                                  Позвонить
+                                </a>
                               ) : null}
                             </div>
                           </>

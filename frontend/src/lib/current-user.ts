@@ -10,6 +10,8 @@ export type CurrentUserRead = {
   is_candidate: boolean;
   is_employer: boolean;
   is_admin: boolean;
+  is_moderator: boolean;
+  is_support: boolean;
 };
 
 const ACTIVE_ROLE_STORAGE_KEY = "hubsty_active_role";
@@ -85,7 +87,7 @@ export function getCurrentCandidateId(): number | null {
   }
 
   const possibleKeys = [
-    "hubsty_candidate_id",
+    CANDIDATE_ID_STORAGE_KEY,
     "candidateId",
     "selectedCandidateId",
   ];
@@ -106,7 +108,7 @@ export function getCurrentEmployerId(): number | null {
   }
 
   const possibleKeys = [
-    "hubsty_employer_id",
+    EMPLOYER_ID_STORAGE_KEY,
     "employerId",
     "selectedEmployerId",
   ];
@@ -116,6 +118,38 @@ export function getCurrentEmployerId(): number | null {
     if (id) {
       return id;
     }
+  }
+
+  return null;
+}
+
+export function isStaffUser(currentUser: CurrentUserRead | null): boolean {
+  if (!currentUser) {
+    return false;
+  }
+
+  return Boolean(
+    currentUser.is_admin ||
+      currentUser.is_moderator ||
+      currentUser.is_support
+  );
+}
+
+export function getStaffRoleLabel(currentUser: CurrentUserRead | null): string | null {
+  if (!currentUser) {
+    return null;
+  }
+
+  if (currentUser.is_admin) {
+    return "admin";
+  }
+
+  if (currentUser.is_moderator) {
+    return "moderator";
+  }
+
+  if (currentUser.is_support) {
+    return "support";
   }
 
   return null;

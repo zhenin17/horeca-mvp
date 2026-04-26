@@ -31,6 +31,8 @@ def serialize_current_user(current_user: CurrentUserContext) -> CurrentUserRead:
         is_candidate=current_user.is_candidate,
         is_employer=current_user.is_employer,
         is_admin=current_user.is_admin,
+        is_moderator=current_user.is_moderator,
+        is_support=current_user.is_support,
     )
 
 

@@ -97,7 +97,7 @@ function vacancyStatusLabel(status: string) {
     case "partially_closed":
       return "Частично закрыта";
     case "closed":
-      return "Закрыта";
+      return "Закта";
     case "archived":
       return "Архив";
     default:
@@ -114,6 +114,7 @@ function matchStatusLabel(status: string) {
     case "viewed":
       return "Просмотрен";
     case "invited":
+    case "contact_opened":
       return "Приглашен";
     case "interviewed":
       return "На интервью";
@@ -216,7 +217,9 @@ function formatReadyToStart(value?: string | null) {
 }
 
 function shouldShowContacts(status: string) {
-  return ["invited", "interviewed", "offered", "hired"].includes(status);
+  return ["invited", "contact_opened", "interviewed", "offered", "hired"].includes(
+    status
+  );
 }
 
 function normalizePhoneHref(phone?: string | null) {
@@ -235,6 +238,25 @@ function normalizeTelegramHref(username?: string | null) {
 
   const cleaned = username.trim().replace(/^@/, "");
   return cleaned ? `https://t.me/${cleaned}` : null;
+}
+
+function buildEmployerToCandidateMessage(
+  employer: EmployerItem,
+  vacancy: VacancyItem | null
+) {
+  const senderName =
+    employer.contact_name?.trim() ||
+    employer.company_name?.trim() ||
+    "работодатель";
+
+  const placeName =
+    vacancy?.venue_name?.trim() ||
+    employer.company_name?.trim() ||
+    "нашей компании";
+
+  const role = vacancy?.role?.trim() || "вакансию";
+
+  return `Здравствуйте! Это ${senderName} из ${placeName}. Мы приглашаем вас на вакансию «${role}» через сервис Хабсти. Напишите, пожалуйста, когда вам удобно обсудить детали.`;
 }
 
 function getAvailableActions(status: string): MatchAction[] {
@@ -300,6 +322,7 @@ function getAvailableActions(status: string): MatchAction[] {
       ];
 
     case "invited":
+    case "contact_opened":
       return [
         {
           key: "interview",
@@ -370,7 +393,7 @@ function belongsToFilter(status: string, filter: CandidateFilter) {
   }
 
   if (filter === "in_work") {
-    return ["invited", "interviewed", "offered"].includes(status);
+    return ["invited", "contact_opened", "interviewed", "offered"].includes(status);
   }
 
   if (filter === "finished") {
@@ -527,6 +550,7 @@ function getMatchStatusHint(status: string) {
     case "viewed":
       return "Кандидат просмотрен. Следующий шаг — пригласить или завершить процесс.";
     case "invited":
+    case "contact_opened":
       return "Контакты уже открыты. Сейчас важно быстро связаться с кандидатом.";
     case "interviewed":
       return "Общение уже идет. Следующий шаг — решение по найму.";
@@ -787,6 +811,21 @@ export default function EmployerDashboardPage() {
   const [reliabilityByCandidateId, setReliabilityByCandidateId] = useState<
     Record<number, CandidateReliability>
   >({});
+  const [copiedMatchId, setCopiedMatchId] = useState<number | null>(null);
+
+  async function copyMessage(matchId: number, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMatchId(matchId);
+
+      window.setTimeout(() => {
+        setCopiedMatchId((current) => (current === matchId ? null : current));
+      }, 1800);
+    } catch (error) {
+      console.error(error);
+      setErrorText("Не удалось скопировать сообщение");
+    }
+  }
 
   async function loadPageData() {
     try {
@@ -877,7 +916,9 @@ export default function EmployerDashboardPage() {
           ["shortlist", "sent", "viewed"].includes(item.status)
         ).length;
         const inWorkCount = vacancyMatches.filter((item) =>
-          ["invited", "interviewed", "offered"].includes(item.status)
+          ["invited", "contact_opened", "interviewed", "offered"].includes(
+            item.status
+          )
         ).length;
         const finishedCount = vacancyMatches.filter((item) =>
           ["hired", "rejected", "no_show"].includes(item.status)
@@ -948,7 +989,7 @@ export default function EmployerDashboardPage() {
     ).length;
 
     const inWorkCandidates = matches.filter((item) =>
-      ["invited", "interviewed", "offered"].includes(item.status)
+      ["invited", "contact_opened", "interviewed", "offered"].includes(item.status)
     ).length;
 
     const hiredCandidates = matches.filter((item) => item.status === "hired").length;
@@ -1094,37 +1135,37 @@ export default function EmployerDashboardPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-  <Link
-    href={`/employer/${currentUser.employer_id}/create-vacancies`}
-    className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-  >
-    Создать вакансию
-  </Link>
+              <Link
+                href={`/employer/${currentUser.employer_id}/create-vacancies`}
+                className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                Создать вакансию
+              </Link>
 
-  <Link
-    href="/employer/onboarding"
-    className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-  >
-    Редактировать данные
-  </Link>
+              <Link
+                href="/employer/onboarding"
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Редактировать данные
+              </Link>
 
-  <button
-    type="button"
-    onClick={() => {
-      void loadPageData();
-    }}
-    className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-  >
-    Обновить
-  </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadPageData();
+                }}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Обновить
+              </button>
 
-  <Link
-    href={`/about?from=/employer/${currentUser.employer_id}`}
-    className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-  >
-    О приложении
-  </Link>
-</div>
+              <Link
+                href={`/about?from=/employer/${currentUser.employer_id}`}
+                className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                О приложении
+              </Link>
+            </div>
           </div>
 
           <div className="mt-6 rounded-2xl border border-slate-200 bg-white/80 p-5">
@@ -1447,12 +1488,13 @@ export default function EmployerDashboardPage() {
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
-                      <Link
-  href={`/employer/${currentUser.employer_id}/create-vacancies?vacancy_id=${selectedVacancy.id}`}
-  className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
->
-  Редактировать
-</Link>
+                        <Link
+                          href={`/employer/${currentUser.employer_id}/create-vacancies?vacancy_id=${selectedVacancy.id}`}
+                          className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          Редактировать
+                        </Link>
+
                         {selectedVacancy.status !== "closed" &&
                         selectedVacancy.status !== "archived" ? (
                           <button
@@ -1488,8 +1530,8 @@ export default function EmployerDashboardPage() {
                           </button>
                         ) : null}
 
-                        {(selectedVacancy.status === "closed" ||
-                          selectedVacancy.status === "archived") ? (
+                        {selectedVacancy.status === "closed" ||
+                        selectedVacancy.status === "archived" ? (
                           <button
                             type="button"
                             disabled={busyVacancyId === selectedVacancy.id}
@@ -1528,7 +1570,6 @@ export default function EmployerDashboardPage() {
                 </div>
               </div>
             </div>
-
             <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h3 className="text-xl font-semibold text-slate-900">
@@ -1588,6 +1629,10 @@ export default function EmployerDashboardPage() {
                   const avatarTone = getCandidateAvatarTone(
                     match.candidate.primary_role
                   );
+                  const preparedMessage = buildEmployerToCandidateMessage(
+                    employer,
+                    selectedVacancy
+                  );
 
                   return (
                     <div
@@ -1622,11 +1667,15 @@ export default function EmployerDashboardPage() {
                                   </span>
 
                                   <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-                                    Опыт: {formatExperience(match.candidate.horeca_experience_months)}
+                                    Опыт:{" "}
+                                    {formatExperience(
+                                      match.candidate.horeca_experience_months
+                                    )}
                                   </span>
 
                                   <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-700">
-                                    Может выйти: {formatReadyToStart(match.candidate.ready_to_start)}
+                                    Может выйти:{" "}
+                                    {formatReadyToStart(match.candidate.ready_to_start)}
                                   </span>
                                 </div>
                               </div>
@@ -1723,13 +1772,16 @@ export default function EmployerDashboardPage() {
                               {contactsOpened ? (
                                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                                   <div className="text-sm font-semibold text-emerald-900">
-                                    Следующий шаг — связаться с кандидатом
+                                    Кандидат приглашён. Напишите ему с контекстом
+                                    вакансии.
                                   </div>
 
                                   <div className="mt-3 space-y-1">
-                                    <div>Телефон: {match.candidate.phone}</div>
+                                    <div>Телефон: {match.candidate.phone || "Не указан"}</div>
                                     {match.candidate.telegram_username ? (
-                                      <div>Telegram: @{match.candidate.telegram_username}</div>
+                                      <div>
+                                        Telegram: @{match.candidate.telegram_username.replace(/^@/, "")}
+                                      </div>
                                     ) : (
                                       <div className="text-emerald-700">
                                         Telegram не указан
@@ -1737,37 +1789,56 @@ export default function EmployerDashboardPage() {
                                     )}
                                   </div>
 
+                                  <div className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-emerald-100">
+                                    {preparedMessage}
+                                  </div>
+
                                   <div className="mt-4 flex flex-col gap-2">
-                                    {phoneHref ? (
-                                      <a
-                                        href={phoneHref}
-                                        className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
-                                      >
-                                        Позвонить
-                                      </a>
-                                    ) : null}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void copyMessage(match.id, preparedMessage)
+                                      }
+                                      className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                    >
+                                      {copiedMatchId === match.id
+                                        ? "Сообщение скопировано"
+                                        : "Скопировать сообщение"}
+                                    </button>
 
                                     {telegramHref ? (
                                       <a
                                         href={telegramHref}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                        className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:opacity-90"
                                       >
                                         Написать в Telegram
                                       </a>
                                     ) : null}
 
+                                    {phoneHref ? (
+                                      <a
+                                        href={phoneHref}
+                                        className="inline-flex items-center justify-center rounded-2xl border border-emerald-300 bg-white px-4 py-3 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                                      >
+                                        Позвонить
+                                      </a>
+                                    ) : null}
+
                                     {!phoneHref && !telegramHref ? (
                                       <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate-600">
-                                        У кандидата нет контактов для быстрого выхода на связь.
+                                        У кандидата нет контактов для быстрого выхода на
+                                        связь. Сообщение можно скопировать и использовать
+                                        позже.
                                       </div>
                                     ) : null}
                                   </div>
                                 </div>
                               ) : (
                                 <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-                                  Контакты откроются после приглашения кандидата.
+                                  Контакты и готовое сообщение откроются после приглашения
+                                  кандидата.
                                 </div>
                               )}
 
@@ -1791,7 +1862,9 @@ export default function EmployerDashboardPage() {
                                       }
                                       className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                                     >
-                                      {busyMatchId === match.id ? "Сохраняем..." : action.label}
+                                      {busyMatchId === match.id
+                                        ? "Сохраняем..."
+                                        : action.label}
                                     </button>
                                   ))}
                                 </div>

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     telegram_auth_max_age_seconds: int = 86400
 
     admin_telegram_user_ids: str = ""
+    moderator_telegram_user_ids: str = ""
+    support_telegram_user_ids: str = ""
+
     allowed_cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3010,http://127.0.0.1:3010"
 
     postgres_host: str
@@ -40,10 +43,9 @@ class Settings(BaseSettings):
             database=self.postgres_db,
         ).render_as_string(hide_password=False)
 
-    @property
-    def admin_telegram_user_ids_list(self) -> list[int]:
+    def _parse_int_list(self, raw_value: str) -> list[int]:
         values: list[int] = []
-        for raw in self.admin_telegram_user_ids.split(","):
+        for raw in raw_value.split(","):
             item = raw.strip()
             if not item:
                 continue
@@ -52,6 +54,18 @@ class Settings(BaseSettings):
             except ValueError:
                 continue
         return values
+
+    @property
+    def admin_telegram_user_ids_list(self) -> list[int]:
+        return self._parse_int_list(self.admin_telegram_user_ids)
+
+    @property
+    def moderator_telegram_user_ids_list(self) -> list[int]:
+        return self._parse_int_list(self.moderator_telegram_user_ids)
+
+    @property
+    def support_telegram_user_ids_list(self) -> list[int]:
+        return self._parse_int_list(self.support_telegram_user_ids)
 
     @property
     def allowed_cors_origins_list(self) -> list[str]:

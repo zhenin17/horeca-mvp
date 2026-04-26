@@ -64,3 +64,47 @@ def require_admin(
             detail="Admin access required",
         )
     return current_user
+
+
+def require_moderator(
+    current_user: CurrentUserContext = Depends(get_current_user),
+) -> CurrentUserContext:
+    if not current_user.is_moderator:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Moderator access required",
+        )
+    return current_user
+
+
+def require_support(
+    current_user: CurrentUserContext = Depends(get_current_user),
+) -> CurrentUserContext:
+    if not current_user.is_support:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Support access required",
+        )
+    return current_user
+
+
+def require_staff(
+    current_user: CurrentUserContext = Depends(get_current_user),
+) -> CurrentUserContext:
+    if not (current_user.is_admin or current_user.is_moderator or current_user.is_support):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Staff access required",
+        )
+    return current_user
+
+
+def require_admin_or_moderator(
+    current_user: CurrentUserContext = Depends(get_current_user),
+) -> CurrentUserContext:
+    if not (current_user.is_admin or current_user.is_moderator):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or moderator access required",
+        )
+    return current_user

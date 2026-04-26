@@ -25,6 +25,8 @@ class CurrentUserContext:
     is_candidate: bool
     is_employer: bool
     is_admin: bool
+    is_moderator: bool
+    is_support: bool
 
 
 def build_current_user_context(telegram_user: TelegramUser, db: Session) -> CurrentUserContext:
@@ -39,10 +41,18 @@ def build_current_user_context(telegram_user: TelegramUser, db: Session) -> Curr
         .first()
     )
 
-    is_admin = telegram_user.telegram_user_id in settings.admin_telegram_user_ids_list
+    telegram_user_id = telegram_user.telegram_user_id
+
+    is_admin = telegram_user_id in settings.admin_telegram_user_ids_list
+    is_moderator = is_admin or (
+        telegram_user_id in settings.moderator_telegram_user_ids_list
+    )
+    is_support = is_admin or is_moderator or (
+        telegram_user_id in settings.support_telegram_user_ids_list
+    )
 
     return CurrentUserContext(
-        telegram_user_id=telegram_user.telegram_user_id,
+        telegram_user_id=telegram_user_id,
         telegram_username=telegram_user.telegram_username,
         first_name=telegram_user.first_name,
         last_name=telegram_user.last_name,
@@ -51,6 +61,8 @@ def build_current_user_context(telegram_user: TelegramUser, db: Session) -> Curr
         is_candidate=candidate is not None,
         is_employer=employer is not None,
         is_admin=is_admin,
+        is_moderator=is_moderator,
+        is_support=is_support,
     )
 
 

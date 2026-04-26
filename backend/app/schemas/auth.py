@@ -21,6 +21,8 @@ class CurrentUserRead(BaseModel):
     is_candidate: bool
     is_employer: bool
     is_admin: bool
+    is_moderator: bool = False
+    is_support: bool = False
 
 
 class AccessTokenResponse(BaseModel):

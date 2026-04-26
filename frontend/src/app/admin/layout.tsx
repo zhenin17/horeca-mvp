@@ -13,7 +13,7 @@ export default function AdminLayout({
         <div className="border-b border-slate-200 bg-slate-50">
           <div className="space-y-2 px-4 py-3">
             <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
-              Админка
+              Админка / staff
             </div>
 
             <nav className="flex flex-wrap items-center gap-4 text-sm">
@@ -31,6 +31,10 @@ export default function AdminLayout({
 
               <Link href="/about?from=/admin/vacancies" className="font-medium hover:text-slate-600">
                 О приложении
+              </Link>
+
+              <Link href="/telegram" className="font-medium hover:text-slate-600">
+                В роли
               </Link>
             </nav>
           </div>

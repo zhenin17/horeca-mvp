@@ -1,55 +1,80 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-
-const ADMIN_AUTH_STORAGE_KEY = "hubsty_admin_auth_v1";
-
-export function isAdminAuthenticated() {
-  if (typeof window === "undefined") {
-    return false;
-  }
-
-  return window.localStorage.getItem(ADMIN_AUTH_STORAGE_KEY) === "accepted";
-}
-
-export function setAdminAuthenticated() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, "accepted");
-}
-
-export function clearAdminAuthenticated() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
-}
+import { apiFetch } from "@/lib/api";
+import type { CurrentUserRead } from "@/lib/current-user";
 
 export default function AdminGuard({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
   const [checked, setChecked] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [errorText, setErrorText] = useState("");
 
   useEffect(() => {
-    if (pathname === "/admin/login") {
-      setChecked(true);
-      return;
+    let cancelled = false;
+
+    async function checkAccess() {
+      try {
+        setChecked(false);
+        setErrorText("");
+
+        const me = await apiFetch<CurrentUserRead>("/auth/me");
+
+        if (cancelled) {
+          return;
+        }
+
+        const isStaff =
+          Boolean(me.is_admin) ||
+          Boolean(me.is_moderator) ||
+          Boolean(me.is_support);
+
+        if (!isStaff) {
+          setHasAccess(false);
+          setChecked(true);
+          setErrorText("Нет доступа к админке");
+
+          if (pathname !== "/telegram") {
+            router.replace("/telegram");
+          }
+          return;
+        }
+
+        setHasAccess(true);
+        setChecked(true);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        console.error(error);
+        setHasAccess(false);
+        setChecked(true);
+
+        if (error instanceof Error) {
+          setErrorText(error.message || "Нет доступа к админке");
+        } else {
+          setErrorText("Нет доступа к админке");
+        }
+
+        if (pathname !== "/telegram") {
+          router.replace("/telegram");
+        }
+      }
     }
 
-    if (!isAdminAuthenticated()) {
-      router.replace("/admin/login");
-      return;
-    }
+    void checkAccess();
 
-    setChecked(true);
+    return () => {
+      cancelled = true;
+    };
   }, [pathname, router]);
 
   if (!checked) {
@@ -57,6 +82,16 @@ export default function AdminGuard({
       <main className="px-4 py-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
           Проверяем доступ к админке...
+        </div>
+      </main>
+    );
+  }
+
+  if (!hasAccess) {
+    return (
+      <main className="px-4 py-6">
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 shadow-sm">
+          {errorText || "Нет доступа к админке"}
         </div>
       </main>
     );
