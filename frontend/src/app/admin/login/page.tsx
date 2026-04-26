@@ -1,82 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { setAdminAuthenticated } from "@/components/AdminGuard";
-
-const ADMIN_PASSWORD = "hubsty-admin";
 
 export default function AdminLoginPage() {
   const router = useRouter();
 
-  const [password, setPassword] = useState("");
-  const [errorText, setErrorText] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      router.replace("/telegram");
+    }, 1200);
 
-  function handleLogin() {
-    setErrorText("");
-
-    if (password.trim() !== ADMIN_PASSWORD) {
-      setErrorText("Неверный пароль");
-      return;
-    }
-
-    setAdminAuthenticated();
-    router.replace("/admin/vacancies");
-  }
+    return () => window.clearTimeout(timer);
+  }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
-      <section className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <p className="text-sm font-medium text-slate-500">Hubsty admin</p>
+    <main className="px-4 py-6">
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-sm font-medium text-slate-500">Админка</p>
 
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">
-          Вход в админку
+          Вход в админку изменён
         </h1>
 
         <p className="mt-3 text-sm leading-6 text-slate-600">
-          Это временная защита MVP, чтобы админские экраны не открывались случайно
-          по прямой ссылке.
+          Доступ к админке теперь проверяется через Telegram-авторизацию и staff-роли.
+          Старый вход по паролю больше не используется.
         </p>
 
-        {errorText ? (
-          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {errorText}
-          </div>
-        ) : null}
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+          <Link
+            href="/telegram"
+            className="inline-flex items-center justify-center rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:opacity-90"
+          >
+            Перейти в Telegram-вход
+          </Link>
 
-        <div className="mt-5">
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Пароль
-          </label>
-
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setErrorText("");
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                handleLogin();
-              }
-            }}
-            className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-900"
-            placeholder="Введите пароль"
-          />
-        </div>
-
-        <button
-          type="button"
-          onClick={handleLogin}
-          className="mt-5 w-full rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90"
-        >
-          Войти
-        </button>
-
-        <div className="mt-4 text-xs leading-5 text-slate-500">
-          Временный пароль MVP:{" "}
-          <span className="font-mono text-slate-700">hubsty-admin</span>
+          <Link
+            href="/admin/candidates"
+            className="inline-flex items-center justify-center rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Открыть админку
+          </Link>
         </div>
       </section>
     </main>
