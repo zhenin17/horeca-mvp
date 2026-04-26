@@ -194,11 +194,11 @@ export default function AdminVacancyDetailPage({
       const [currentUserData, shortlistResponse, funnelResponse, photosData] =
         await Promise.all([
           apiFetch<CurrentUserRead>("/auth/me"),
-          fetch(`/api/shortlists/vacancy/${id}`, {
+          fetch(`/api/me/staff/vacancies/${id}/shortlist`, {
             cache: "no-store",
             headers: getAuthHeaders(),
           }),
-          fetch(`/api/shortlists/vacancy/${id}/funnel`, {
+          fetch(`/api/me/staff/vacancies/${id}/funnel`, {
             cache: "no-store",
             headers: getAuthHeaders(),
           }),
