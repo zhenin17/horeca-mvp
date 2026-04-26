@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { normalizeMediaUrl } from "@/lib/api";
+import { apiFetch, getAccessToken, normalizeMediaUrl } from "@/lib/api";
 import { formatReadyToStart } from "@/lib/format";
 import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
 import { statusLabel } from "@/lib/status";
@@ -23,13 +23,20 @@ type CandidateItem = {
 
 type CandidateReliability = {
   candidate_id: number;
-  total_matches: number;
-  invited_count: number;
-  interviewed_count: number;
-  hired_count: number;
-  rejected_count: number;
-  no_show_count: number;
-  reliability_score: number;
+
+  // Текущий backend-формат
+  score?: number;
+  worked_count?: number;
+  no_show_count?: number;
+  cancelled_count?: number;
+
+  // Совместимость со старым frontend-форматом
+  total_matches?: number;
+  invited_count?: number;
+  interviewed_count?: number;
+  hired_count?: number;
+  rejected_count?: number;
+  reliability_score?: number;
 };
 
 type MatchItem = {
@@ -65,6 +72,8 @@ type VacancyPhoto = {
   id: number;
   vacancy_id?: number;
   photo_url: string;
+  sort_order?: number;
+  is_cover?: boolean | null;
   is_main?: boolean | null;
   created_at?: string | null;
 };
@@ -121,6 +130,22 @@ function getAllowedActions(status: string): MatchAction[] {
   return transitions[status] || [];
 }
 
+function getAuthHeaders(): HeadersInit {
+  const token = getAccessToken();
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+function getReliabilityScore(reliability: CandidateReliability): number {
+  return reliability.score ?? reliability.reliability_score ?? 0;
+}
+
 export default function AdminVacancyDetailPage({
   params,
 }: {
@@ -138,31 +163,32 @@ export default function AdminVacancyDetailPage({
 
   async function loadData() {
     setLoading(true);
+
     try {
-      const [shortlistResponse, funnelResponse, photosResponse] = await Promise.all([
-        fetch(`/api/shortlists/vacancy/${id}`, { cache: "no-store" }),
-        fetch(`/api/shortlists/vacancy/${id}/funnel`, { cache: "no-store" }),
-        fetch(`/api/vacancies/${id}/photos`, { cache: "no-store" }),
+      const [shortlistResponse, funnelResponse, photosData] = await Promise.all([
+        fetch(`/api/shortlists/vacancy/${id}`, {
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+        fetch(`/api/shortlists/vacancy/${id}/funnel`, {
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        }),
+        apiFetch<VacancyPhoto[]>(`/me/staff/vacancies/${id}/photos`),
       ]);
 
       if (!shortlistResponse.ok) {
-        throw new Error("Не удалось загрузить shortlist");
+        const data = await shortlistResponse.json().catch(() => null);
+        throw new Error(data?.detail || "Не удалось загрузить shortlist");
       }
 
       if (!funnelResponse.ok) {
-        throw new Error("Не удалось загрузить воронку");
+        const data = await funnelResponse.json().catch(() => null);
+        throw new Error(data?.detail || "Не удалось загрузить воронку");
       }
 
       const shortlistData = (await shortlistResponse.json()) as VacancyShortlist;
       const funnelData = (await funnelResponse.json()) as VacancyFunnel;
-
-      let photosData: VacancyPhoto[] = [];
-
-      if (photosResponse.ok) {
-        photosData = (await photosResponse.json()) as VacancyPhoto[];
-      } else {
-        console.warn("Не удалось загрузить фото вакансии");
-      }
 
       setShortlist(shortlistData);
       setFunnel(funnelData);
@@ -171,14 +197,11 @@ export default function AdminVacancyDetailPage({
       const reliabilityEntries = await Promise.all(
         shortlistData.matches.map(async (match) => {
           try {
-            const response = await fetch(`/api/candidates/${match.candidate_id}/reliability`, {
-              cache: "no-store",
-            });
-            if (!response.ok) {
-              return [match.candidate_id, 0] as const;
-            }
-            const data = (await response.json()) as CandidateReliability;
-            return [match.candidate_id, data.reliability_score] as const;
+            const data = await apiFetch<CandidateReliability>(
+              `/me/staff/candidates/${match.candidate_id}/reliability`
+            );
+
+            return [match.candidate_id, getReliabilityScore(data)] as const;
           } catch {
             return [match.candidate_id, 0] as const;
           }
@@ -188,7 +211,11 @@ export default function AdminVacancyDetailPage({
       setReliabilityMap(Object.fromEntries(reliabilityEntries));
     } catch (error) {
       console.error(error);
-      setMessage("Не удалось загрузить страницу вакансии");
+      if (error instanceof Error) {
+        setMessage(error.message || "Не удалось загрузить страницу вакансии");
+      } else {
+        setMessage("Не удалось загрузить страницу вакансии");
+      }
     } finally {
       setLoading(false);
     }
@@ -196,15 +223,7 @@ export default function AdminVacancyDetailPage({
 
   async function loadPhotos() {
     try {
-      const response = await fetch(`/api/vacancies/${id}/photos`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error("Не удалось загрузить фото вакансии");
-      }
-
-      const data = (await response.json()) as VacancyPhoto[];
+      const data = await apiFetch<VacancyPhoto[]>(`/me/staff/vacancies/${id}/photos`);
       setPhotos(data);
     } catch (error) {
       console.error(error);
@@ -229,6 +248,7 @@ export default function AdminVacancyDetailPage({
     try {
       const response = await fetch(`/api/vacancies/${id}/photos/${photoId}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
       });
 
       const data = await response.json().catch(() => null);
@@ -256,6 +276,7 @@ export default function AdminVacancyDetailPage({
     try {
       const response = await fetch(`/api/matches/${matchId}/${action}`, {
         method: "POST",
+        headers: getAuthHeaders(),
       });
 
       const data = (await response.json()) as { detail?: string };
@@ -331,7 +352,7 @@ export default function AdminVacancyDetailPage({
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {photos.map((photo) => {
-              const photoUrl = normalizeMediaUrl(photo.photo_url);
+              const photoUrl = normalizeMediaUrl(photo.photo_url) || "";
 
               return (
                 <div
@@ -355,7 +376,7 @@ export default function AdminVacancyDetailPage({
                   <div className="space-y-3 p-3">
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <div className="text-slate-600">ID фото: {photo.id}</div>
-                      {photo.is_main ? (
+                      {photo.is_cover || photo.is_main ? (
                         <div className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
                           главное
                         </div>

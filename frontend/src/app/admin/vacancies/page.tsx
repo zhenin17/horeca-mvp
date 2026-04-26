@@ -10,6 +10,8 @@ type VacancyPhoto = {
   id: number;
   vacancy_id?: number;
   photo_url: string;
+  sort_order?: number;
+  is_cover?: boolean | null;
   is_main?: boolean | null;
   created_at?: string | null;
 };
@@ -26,19 +28,36 @@ type VacancyItem = {
   needed_start?: string | null;
   status: string;
 
-  // Optional: если backend уже отдает эти поля в list API — покажем.
-  // Если не отдает — ничего дополнительно не запрашиваем.
+  // Реальные поля backend для работы / подработки / смен
+  listing_type?: string | null;
+  shift_date?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  urgent_flag?: boolean;
+  slots_count?: number | null;
+
+  // Совместимость со старыми/возможными frontend-полями
   employment_type?: string | null;
   vacancy_type?: string | null;
   type?: string | null;
-  shift_date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+
   photos?: VacancyPhoto[] | null;
 };
 
+function getVacancyTypeValue(vacancy: VacancyItem): string {
+  return (
+    vacancy.listing_type ||
+    vacancy.employment_type ||
+    vacancy.vacancy_type ||
+    vacancy.type ||
+    ""
+  );
+}
+
 function getVacancyType(vacancy: VacancyItem): string {
-  const rawType = vacancy.employment_type || vacancy.vacancy_type || vacancy.type || "";
+  const rawType = getVacancyTypeValue(vacancy);
 
   const labels: Record<string, string> = {
     job: "Работа",
@@ -52,7 +71,7 @@ function getVacancyType(vacancy: VacancyItem): string {
 }
 
 function getVacancyTypeClass(vacancy: VacancyItem): string {
-  const rawType = vacancy.employment_type || vacancy.vacancy_type || vacancy.type || "";
+  const rawType = getVacancyTypeValue(vacancy);
 
   if (rawType === "shift") {
     return "border-violet-200 bg-violet-50 text-violet-700";
@@ -96,20 +115,23 @@ function getStatusClass(status: string): string {
 }
 
 function getScheduleText(vacancy: VacancyItem): string {
+  const startTime = vacancy.shift_start_time || vacancy.start_time || "";
+  const endTime = vacancy.shift_end_time || vacancy.end_time || "";
+
   if (vacancy.schedule_text) {
     return vacancy.schedule_text;
   }
 
-  if (vacancy.shift_date && vacancy.start_time && vacancy.end_time) {
-    return `${vacancy.shift_date}, ${vacancy.start_time}–${vacancy.end_time}`;
+  if (vacancy.shift_date && startTime && endTime) {
+    return `${vacancy.shift_date}, ${startTime}–${endTime}`;
   }
 
   if (vacancy.shift_date) {
     return vacancy.shift_date;
   }
 
-  if (vacancy.start_time && vacancy.end_time) {
-    return `${vacancy.start_time}–${vacancy.end_time}`;
+  if (startTime && endTime) {
+    return `${startTime}–${endTime}`;
   }
 
   return "-";
@@ -120,7 +142,10 @@ function getMainPhoto(vacancy: VacancyItem): VacancyPhoto | null {
     return null;
   }
 
-  return vacancy.photos.find((photo) => photo.is_main) || vacancy.photos[0];
+  return (
+    vacancy.photos.find((photo) => photo.is_cover || photo.is_main) ||
+    vacancy.photos[0]
+  );
 }
 
 export default function AdminVacanciesPage() {
@@ -132,7 +157,7 @@ export default function AdminVacanciesPage() {
     async function loadVacancies() {
       try {
         setErrorText("");
-        const data = await apiFetch<VacancyItem[]>("/vacancies/");
+        const data = await apiFetch<VacancyItem[]>("/me/staff/vacancies");
         setVacancies(data);
       } catch (error) {
         console.error(error);
@@ -236,7 +261,9 @@ export default function AdminVacanciesPage() {
           <div className="mt-4 space-y-3">
             {vacancies.map((vacancy) => {
               const mainPhoto = getMainPhoto(vacancy);
-              const photoUrl = mainPhoto ? normalizeMediaUrl(mainPhoto.photo_url) || "" : "";
+              const photoUrl = mainPhoto
+                ? normalizeMediaUrl(mainPhoto.photo_url) || ""
+                : "";
 
               return (
                 <div
@@ -280,6 +307,12 @@ export default function AdminVacanciesPage() {
                           >
                             {getVacancyType(vacancy)}
                           </span>
+
+                          {vacancy.urgent_flag ? (
+                            <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700">
+                              Срочно
+                            </span>
+                          ) : null}
                         </div>
 
                         <div className="mt-1 text-sm text-slate-700">
@@ -296,6 +329,9 @@ export default function AdminVacanciesPage() {
                           <div>График: {getScheduleText(vacancy)}</div>
                           {vacancy.needed_start ? (
                             <div>Старт: {vacancy.needed_start}</div>
+                          ) : null}
+                          {vacancy.slots_count ? (
+                            <div>Слотов: {vacancy.slots_count}</div>
                           ) : null}
                           <div>Employer ID: {vacancy.employer_id}</div>
                         </div>

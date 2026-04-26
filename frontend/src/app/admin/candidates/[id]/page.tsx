@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
-import { normalizeMediaUrl } from "@/lib/api";
+import { apiFetch, getAccessToken, normalizeMediaUrl } from "@/lib/api";
 import { formatReadyToStart, formatSalary } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
 import { reliabilityBadgeClass, reliabilityLabel } from "@/lib/events";
@@ -51,18 +51,18 @@ type CandidateProfile = {
 type CandidateReliability = {
   candidate_id: number;
 
-  // Новый ожидаемый формат
+  // Текущий backend-формат
   score?: number;
   worked_count?: number;
+  no_show_count?: number;
   cancelled_count?: number;
 
-  // Уже существующий формат, который был в файле
+  // Совместимость со старым frontend-форматом
   total_matches?: number;
   invited_count?: number;
   interviewed_count?: number;
   hired_count?: number;
   rejected_count?: number;
-  no_show_count?: number;
   reliability_score?: number;
 };
 
@@ -70,6 +70,8 @@ type CandidatePhoto = {
   id: number;
   candidate_id?: number;
   photo_url: string;
+  sort_order?: number;
+  is_cover?: boolean | null;
   is_main?: boolean | null;
   created_at?: string | null;
 };
@@ -120,6 +122,18 @@ function formatAvailabilityTime(item: CandidateAvailabilityItem): string {
   return "Время не указано";
 }
 
+function getAuthHeaders(): HeadersInit {
+  const token = getAccessToken();
+
+  if (!token) {
+    return {};
+  }
+
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 export default function AdminCandidateDetailPage({
   params,
 }: {
@@ -141,49 +155,18 @@ export default function AdminCandidateDetailPage({
 
     try {
       const [
-        candidateResponse,
-        dashboardResponse,
-        reliabilityResponse,
-        photosResponse,
-        availabilityResponse,
+        candidateData,
+        dashboardData,
+        reliabilityData,
+        photosData,
+        availabilityData,
       ] = await Promise.all([
-        fetch(`/api/candidates/${id}`, { cache: "no-store" }),
-        fetch(`/api/candidates/${id}/dashboard`, { cache: "no-store" }),
-        fetch(`/api/candidates/${id}/reliability`, { cache: "no-store" }),
-        fetch(`/api/candidates/${id}/photos`, { cache: "no-store" }),
-        fetch(`/api/candidates/${id}/availability`, { cache: "no-store" }),
+        apiFetch<CandidateProfile>(`/me/staff/candidates/${id}`),
+        apiFetch<CandidateDashboard>(`/me/staff/candidates/${id}/dashboard`),
+        apiFetch<CandidateReliability>(`/me/staff/candidates/${id}/reliability`),
+        apiFetch<CandidatePhoto[]>(`/me/staff/candidates/${id}/photos`),
+        apiFetch<CandidateAvailabilityItem[]>(`/me/staff/candidates/${id}/availability`),
       ]);
-
-      if (!candidateResponse.ok) {
-        throw new Error("Не удалось загрузить профиль кандидата");
-      }
-
-      if (!dashboardResponse.ok) {
-        throw new Error("Не удалось загрузить дашборд кандидата");
-      }
-
-      if (!reliabilityResponse.ok) {
-        throw new Error("Не удалось загрузить индекс надежности кандидата");
-      }
-
-      const candidateData = (await candidateResponse.json()) as CandidateProfile;
-      const dashboardData = (await dashboardResponse.json()) as CandidateDashboard;
-      const reliabilityData = (await reliabilityResponse.json()) as CandidateReliability;
-
-      let photosData: CandidatePhoto[] = [];
-      let availabilityData: CandidateAvailabilityItem[] = [];
-
-      if (photosResponse.ok) {
-        photosData = (await photosResponse.json()) as CandidatePhoto[];
-      } else {
-        console.warn("Не удалось загрузить фото кандидата");
-      }
-
-      if (availabilityResponse.ok) {
-        availabilityData = (await availabilityResponse.json()) as CandidateAvailabilityItem[];
-      } else {
-        console.warn("Не удалось загрузить availability кандидата");
-      }
 
       setCandidate(candidateData);
       setDashboard(dashboardData);
@@ -200,15 +183,7 @@ export default function AdminCandidateDetailPage({
 
   async function loadPhotos() {
     try {
-      const response = await fetch(`/api/candidates/${id}/photos`, {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        throw new Error("Не удалось загрузить фото кандидата");
-      }
-
-      const data = (await response.json()) as CandidatePhoto[];
+      const data = await apiFetch<CandidatePhoto[]>(`/me/staff/candidates/${id}/photos`);
       setPhotos(data);
     } catch (error) {
       console.error(error);
@@ -233,6 +208,7 @@ export default function AdminCandidateDetailPage({
     try {
       const response = await fetch(`/api/candidates/${id}/photos/${photoId}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
       });
 
       const data = await response.json().catch(() => null);
@@ -260,6 +236,7 @@ export default function AdminCandidateDetailPage({
     try {
       const response = await fetch(`/api/matches/${matchId}/${action}`, {
         method: "POST",
+        headers: getAuthHeaders(),
       });
 
       const data = (await response.json()) as { detail?: string };
@@ -366,7 +343,7 @@ export default function AdminCandidateDetailPage({
                   <div className="space-y-3 p-3">
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <div className="text-slate-600">ID фото: {photo.id}</div>
-                      {photo.is_main ? (
+                      {photo.is_cover || photo.is_main ? (
                         <div className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
                           главное
                         </div>

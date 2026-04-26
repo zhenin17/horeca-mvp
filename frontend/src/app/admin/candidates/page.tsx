@@ -9,6 +9,8 @@ type CandidatePhoto = {
   id: number;
   candidate_id?: number;
   photo_url: string;
+  sort_order?: number;
+  is_cover?: boolean | null;
   is_main?: boolean | null;
   created_at?: string | null;
 };
@@ -26,8 +28,7 @@ type CandidateItem = {
   expected_income?: string | null;
   is_active: boolean;
 
-  // Optional: если backend уже отдает фото в list API — покажем.
-  // Если не отдает — ничего дополнительно не запрашиваем.
+  // Optional: /me/staff/candidates already returns photos through CandidateRead.
   photos?: CandidatePhoto[] | null;
 };
 
@@ -65,7 +66,10 @@ function getMainPhoto(candidate: CandidateItem): CandidatePhoto | null {
     return null;
   }
 
-  return candidate.photos.find((photo) => photo.is_main) || candidate.photos[0];
+  return (
+    candidate.photos.find((photo) => photo.is_cover || photo.is_main) ||
+    candidate.photos[0]
+  );
 }
 
 export default function AdminCandidatesPage() {
@@ -77,7 +81,7 @@ export default function AdminCandidatesPage() {
     async function loadCandidates() {
       try {
         setErrorText("");
-        const data = await apiFetch<CandidateItem[]>("/candidates/");
+        const data = await apiFetch<CandidateItem[]>("/me/staff/candidates");
         setCandidates(data);
       } catch (error) {
         console.error(error);
@@ -162,7 +166,9 @@ export default function AdminCandidatesPage() {
           <div className="mt-4 space-y-3">
             {candidates.map((candidate) => {
               const mainPhoto = getMainPhoto(candidate);
-              const photoUrl = mainPhoto ? normalizeMediaUrl(mainPhoto.photo_url) || "" : "";
+              const photoUrl = mainPhoto
+                ? normalizeMediaUrl(mainPhoto.photo_url) || ""
+                : "";
 
               return (
                 <div
