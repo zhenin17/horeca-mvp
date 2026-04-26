@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.dependencies.auth import get_current_user, require_employer
 from app.models.employer import Employer
-from app.schemas.employer import EmployerCreate, EmployerRead
+from app.schemas.employer import EmployerCreate, EmployerRead, EmployerUpdate
 from app.services.auth import CurrentUserContext
 
 router = APIRouter(prefix="/me/employer", tags=["Me Employer"])
@@ -51,4 +51,30 @@ def create_my_employer_profile(
     db.add(employer)
     db.commit()
     db.refresh(employer)
+    return employer
+
+
+@router.patch("", response_model=EmployerRead)
+def update_my_employer_profile(
+    payload: EmployerUpdate,
+    current_user: CurrentUserContext = Depends(require_employer),
+    db: Session = Depends(get_db),
+):
+    employer = (
+        db.query(Employer)
+        .filter(Employer.id == current_user.employer_id)
+        .first()
+    )
+
+    if not employer:
+        raise HTTPException(status_code=404, detail="Employer not found")
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(employer, field, value)
+
+    db.commit()
+    db.refresh(employer)
+
     return employer

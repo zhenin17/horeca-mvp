@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { apiFetch, apiPostJson } from "@/lib/api";
+import { apiFetch, apiPatchJson, apiPostJson } from "@/lib/api";
 import type { CurrentUserRead } from "@/lib/current-user";
 
 type EmployerForm = {
@@ -77,7 +77,9 @@ function inputClass(hasError?: boolean) {
 export default function EmployerOnboardingPage() {
   const router = useRouter();
 
-  const [, setCurrentUser] = useState<CurrentUserRead | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUserRead | null>(null);
+  const [employerId, setEmployerId] = useState<number | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [bootLoading, setBootLoading] = useState(true);
 
   const [form, setForm] = useState<EmployerForm>({
@@ -104,9 +106,25 @@ export default function EmployerOnboardingPage() {
         setCurrentUser(me);
 
         if (me.is_employer && me.employer_id) {
-          router.replace(`/employer/${me.employer_id}`);
+          setEmployerId(me.employer_id);
+          setIsEditMode(true);
+
+          const employer = await apiFetch<EmployerRead>("/me/employer");
+
+          setForm({
+            company_name: employer.company_name || "",
+            contact_name: employer.contact_name || "",
+            phone: employer.phone || "",
+            telegram_username: employer.telegram_username || "",
+            city: employer.city || "Санкт-Петербург",
+            website: employer.website || "",
+          });
+
           return;
         }
+
+        setEmployerId(null);
+        setIsEditMode(false);
 
         const presetName = [me.first_name, me.last_name]
           .filter(Boolean)
@@ -131,7 +149,7 @@ export default function EmployerOnboardingPage() {
     }
 
     void bootstrap();
-  }, [router]);
+  }, []);
 
   function updateField<K extends keyof EmployerForm>(key: K, value: EmployerForm[K]) {
     setForm((prev) => ({
@@ -163,14 +181,28 @@ export default function EmployerOnboardingPage() {
 
       setSaving(true);
 
-      const employer = await apiPostJson<EmployerRead>("/me/employer", {
+      const payload = {
         company_name: form.company_name.trim(),
         contact_name: form.contact_name.trim(),
         phone: form.phone.trim(),
         telegram_username: normalizeTelegramUsername(form.telegram_username) || null,
         city: form.city.trim(),
         website: normalizeWebsite(form.website) || null,
-      });
+      };
+
+      if (isEditMode) {
+        const employer = await apiPatchJson<EmployerRead>("/me/employer", payload);
+
+        setSuccessText("Данные работодателя обновлены");
+
+        setTimeout(() => {
+          router.push(`/employer/${employer.id}`);
+        }, 700);
+
+        return;
+      }
+
+      const employer = await apiPostJson<EmployerRead>("/me/employer", payload);
 
       setSuccessText("Профиль работодателя сохранен");
 
@@ -182,12 +214,18 @@ export default function EmployerOnboardingPage() {
       if (error instanceof Error) {
         setErrorText(error.message);
       } else {
-        setErrorText("Не удалось создать работодателя");
+        setErrorText(
+          isEditMode
+            ? "Не удалось обновить данные работодателя"
+            : "Не удалось создать работодателя"
+        );
       }
     } finally {
       setSaving(false);
     }
   }
+
+  const backHref = employerId ? `/employer/${employerId}` : "/employer/start";
 
   if (bootLoading) {
     return (
@@ -207,15 +245,19 @@ export default function EmployerOnboardingPage() {
             <div className="max-w-2xl">
               <p className="text-sm font-medium text-slate-500">Работодатель</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-                Заполнить данные компании
+                {isEditMode
+                  ? "Редактировать данные работодателя"
+                  : "Заполнить данные компании"}
               </h1>
               <p className="mt-3 text-sm leading-6 text-slate-600">
-                Укажи базовую информацию о компании. Сайт можно добавить позже, он не обязателен.
+                {isEditMode
+                  ? "Обновите данные компании и контакты. Эти контакты будут доступны кандидату после приглашения."
+                  : "Укажи базовую информацию о компании. Сайт можно добавить позже, он не обязателен."}
               </p>
             </div>
 
             <Link
-              href="/employer/start"
+              href={backHref}
               className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Назад
@@ -228,11 +270,15 @@ export default function EmployerOnboardingPage() {
             </div>
 
             <div className="mt-2 text-lg font-semibold text-slate-900">
-              Сначала профиль работодателя, потом создание первой вакансии
+              {isEditMode
+                ? "После сохранения вы вернетесь в кабинет работодателя"
+                : "Сначала профиль работодателя, потом создание первой вакансии"}
             </div>
 
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              После сохранения вы сразу перейдете к созданию вакансии.
+              {isEditMode
+                ? "Актуальные контакты будут использоваться в откликах кандидатов после приглашения."
+                : "После сохранения вы сразу перейдете к созданию вакансии."}
             </p>
           </div>
         </div>
@@ -333,11 +379,15 @@ export default function EmployerOnboardingPage() {
             disabled={saving}
             className="rounded-2xl border border-slate-900 bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? "Сохраняем..." : "Продолжить"}
+            {saving
+              ? "Сохраняем..."
+              : isEditMode
+                ? "Сохранить изменения"
+                : "Продолжить"}
           </button>
 
           <Link
-            href="/employer/start"
+            href={backHref}
             className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Отмена
