@@ -626,7 +626,6 @@ function VacancyHeroPhoto({
 }
 
 export default function CandidateVacancyDetailsPage() {
-  export default function CandidateVacancyDetailsPage() {
     const params = useParams<{ id: string }>();
     const router = useRouter();
     const searchParams = useSearchParams();
