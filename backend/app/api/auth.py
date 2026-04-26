@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.security import create_access_token
 from app.dependencies.auth import get_current_user
+from app.dependencies.rate_limit import rate_limit_auth, rate_limit_read
 from app.schemas.auth import (
     AccessTokenResponse,
     CurrentUserRead,
@@ -38,9 +39,12 @@ def serialize_current_user(current_user: CurrentUserContext) -> CurrentUserRead:
 
 @router.post("/telegram", response_model=AccessTokenResponse)
 def auth_with_telegram(
+    request: Request,
     payload: TelegramAuthInitDataRequest,
     db: Session = Depends(get_db),
 ):
+    rate_limit_auth(request)
+
     current_user = get_or_create_telegram_user_from_init_data(payload.init_data, db)
 
     access_token = create_access_token(
@@ -57,9 +61,12 @@ def auth_with_telegram(
 
 @router.post("/dev", response_model=AccessTokenResponse)
 def auth_with_dev_user(
+    request: Request,
     payload: DevAuthRequest,
     db: Session = Depends(get_db),
 ):
+    rate_limit_auth(request)
+
     if not settings.enable_dev_auth:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -82,6 +89,12 @@ def auth_with_dev_user(
 
 @router.get("/me", response_model=CurrentUserRead)
 def get_me(
+    request: Request,
     current_user: CurrentUserContext = Depends(get_current_user),
 ):
+    rate_limit_read(
+        request,
+        user_id=current_user.telegram_user_id,
+    )
+
     return serialize_current_user(current_user)

@@ -1,12 +1,13 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.db import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.rate_limit import rate_limit_upload
 from app.models.candidate import Candidate
 from app.models.funnel_event import FunnelEvent
 from app.models.vacancy import Vacancy
@@ -219,6 +220,7 @@ def add_vacancy_photo(
 
 @router.post("/{vacancy_id}/photos/upload", response_model=VacancyPhotoRead)
 async def upload_vacancy_photo(
+    request: Request,
     vacancy_id: int,
     file: UploadFile = File(...),
     is_cover: bool = False,
@@ -226,6 +228,11 @@ async def upload_vacancy_photo(
     current_user: CurrentUserContext = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_limit_upload(
+        request,
+        user_id=current_user.telegram_user_id,
+    )
+
     require_vacancy_owner_or_admin(vacancy_id, current_user, db)
 
     if not file.filename:
@@ -243,10 +250,14 @@ async def upload_vacancy_photo(
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP are allowed")
 
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp"}
+    ext = Path(file.filename).suffix.lower()
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, WEBP are allowed")
+
     vacancy_dir = VACANCY_UPLOADS_DIR / str(vacancy_id)
     vacancy_dir.mkdir(parents=True, exist_ok=True)
 
-    ext = Path(file.filename).suffix.lower() or ".jpg"
     filename = f"{uuid4().hex}{ext}"
     file_path = vacancy_dir / filename
 

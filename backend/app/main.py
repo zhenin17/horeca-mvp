@@ -49,7 +49,13 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.get("/uploads/{file_path:path}", include_in_schema=False)
 def serve_upload(file_path: str):
-    target = UPLOADS_DIR / file_path
+    uploads_root = UPLOADS_DIR.resolve()
+    target = (UPLOADS_DIR / file_path).resolve()
+
+    try:
+        target.relative_to(uploads_root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="File not found")
 
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
