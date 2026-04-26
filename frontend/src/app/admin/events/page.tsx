@@ -17,7 +17,28 @@ type FunnelEventItem = {
   event_type: string;
   event_source?: string | null;
   comment?: string | null;
+  created_at?: string | null;
 };
+
+function formatEventDateTime(value?: string | null): string {
+  if (!value) {
+    return "-";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 export default function AdminEventsPage() {
   const [events, setEvents] = useState<FunnelEventItem[]>([]);
@@ -27,6 +48,7 @@ export default function AdminEventsPage() {
   const [eventTypeFilter, setEventTypeFilter] = useState("all");
   const [candidateFilter, setCandidateFilter] = useState("");
   const [vacancyFilter, setVacancyFilter] = useState("");
+  const [employerFilter, setEmployerFilter] = useState("");
 
   useEffect(() => {
     async function loadEvents() {
@@ -52,25 +74,59 @@ export default function AdminEventsPage() {
   }, []);
 
   const eventTypeOptions = useMemo(() => {
-    return Array.from(new Set(events.map((event) => event.event_type)));
+    return Array.from(new Set(events.map((event) => event.event_type))).sort();
+  }, [events]);
+
+  const sortedEvents = useMemo(() => {
+    return [...events].sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+      if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+        return b.id - a.id;
+      }
+
+      return bTime - aTime;
+    });
   }, [events]);
 
   const filteredEvents = useMemo(() => {
-    return events.filter((event) => {
+    const candidateValue = candidateFilter.trim();
+    const vacancyValue = vacancyFilter.trim();
+    const employerValue = employerFilter.trim();
+
+    return sortedEvents.filter((event) => {
       const matchesType =
         eventTypeFilter === "all" || event.event_type === eventTypeFilter;
 
       const matchesCandidate =
-        !candidateFilter ||
-        String(event.candidate_id ?? "").includes(candidateFilter.trim());
+        !candidateValue ||
+        String(event.candidate_id ?? "").includes(candidateValue);
 
       const matchesVacancy =
-        !vacancyFilter ||
-        String(event.vacancy_id ?? "").includes(vacancyFilter.trim());
+        !vacancyValue ||
+        String(event.vacancy_id ?? "").includes(vacancyValue);
 
-      return matchesType && matchesCandidate && matchesVacancy;
+      const matchesEmployer =
+        !employerValue ||
+        String(event.employer_id ?? "").includes(employerValue);
+
+      return matchesType && matchesCandidate && matchesVacancy && matchesEmployer;
     });
-  }, [events, eventTypeFilter, candidateFilter, vacancyFilter]);
+  }, [
+    sortedEvents,
+    eventTypeFilter,
+    candidateFilter,
+    vacancyFilter,
+    employerFilter,
+  ]);
+
+  function resetFilters() {
+    setEventTypeFilter("all");
+    setCandidateFilter("");
+    setVacancyFilter("");
+    setEmployerFilter("");
+  }
 
   if (loading) {
     return <main className="px-4 py-6">Загрузка событий...</main>;
@@ -79,7 +135,18 @@ export default function AdminEventsPage() {
   return (
     <main className="space-y-6 px-4 py-6">
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h1 className="text-2xl font-semibold">Админка · Журнал событий</h1>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Админка · Журнал событий</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              События отсортированы от новых к старым.
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+            Всего событий: <span className="font-semibold">{events.length}</span>
+          </div>
+        </div>
 
         {errorText ? (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -87,7 +154,7 @@ export default function AdminEventsPage() {
           </div>
         ) : (
           <>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
               <div>
                 <label className="mb-1 block text-sm text-slate-600">
                   Тип события
@@ -129,10 +196,32 @@ export default function AdminEventsPage() {
                   className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
+
+              <div>
+                <label className="mb-1 block text-sm text-slate-600">
+                  Employer ID
+                </label>
+                <input
+                  value={employerFilter}
+                  onChange={(e) => setEmployerFilter(e.target.value)}
+                  placeholder="Например, 1"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
             </div>
 
-            <div className="mt-3 text-sm text-slate-500">
-              Найдено событий: {filteredEvents.length}
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-500">
+                Найдено событий: {filteredEvents.length}
+              </div>
+
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 sm:w-auto"
+              >
+                Сбросить фильтры
+              </button>
             </div>
 
             {filteredEvents.length === 0 ? (
@@ -146,10 +235,16 @@ export default function AdminEventsPage() {
                     key={event.id}
                     className="rounded-xl border border-slate-200 p-4"
                   >
-                    <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-1">
-                        <div className="font-medium">
-                          #{event.id} · {eventTypeLabel(event.event_type)}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-medium">
+                            #{event.id} · {eventTypeLabel(event.event_type)}
+                          </div>
+
+                          <div className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">
+                            {formatEventDateTime(event.created_at)}
+                          </div>
                         </div>
 
                         <div className="text-sm text-slate-600">
@@ -163,7 +258,8 @@ export default function AdminEventsPage() {
                         </div>
 
                         <div className="text-sm text-slate-500">
-                          Комментарий: {formatEventComment(event.event_type, event.comment)}
+                          Комментарий:{" "}
+                          {formatEventComment(event.event_type, event.comment)}
                         </div>
                       </div>
 
