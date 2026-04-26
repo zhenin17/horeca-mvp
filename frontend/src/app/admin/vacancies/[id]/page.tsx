@@ -85,6 +85,18 @@ type MatchAction = {
   successText: string;
 };
 
+type VacancyStatusAction = {
+  status: string;
+  label: string;
+};
+
+const VACANCY_STATUS_ACTIONS: VacancyStatusAction[] = [
+  { status: "new", label: "Новая" },
+  { status: "in_progress", label: "В работе" },
+  { status: "closed", label: "Закрыть" },
+  { status: "archived", label: "Архив" },
+];
+
 function getAllowedActions(status: string): MatchAction[] {
   const transitions: Record<string, MatchAction[]> = {
     shortlist: [
@@ -172,6 +184,7 @@ export default function AdminVacancyDetailPage({
   const [reliabilityMap, setReliabilityMap] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [photoDeletingId, setPhotoDeletingId] = useState<number | null>(null);
+  const [vacancyStatusUpdating, setVacancyStatusUpdating] = useState(false);
   const [message, setMessage] = useState("");
 
   async function loadData() {
@@ -286,6 +299,39 @@ export default function AdminVacancyDetailPage({
     }
   }
 
+  async function updateVacancyStatus(status: string) {
+    setMessage("");
+    setVacancyStatusUpdating(true);
+
+    try {
+      const response = await fetch(`/api/me/staff/vacancies/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          ...getAuthHeaders(),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.detail || "Не удалось изменить статус вакансии");
+      }
+
+      setMessage("Статус вакансии обновлен");
+      await loadData();
+    } catch (error) {
+      if (error instanceof Error) {
+        setMessage(error.message);
+      } else {
+        setMessage("Не удалось изменить статус вакансии");
+      }
+    } finally {
+      setVacancyStatusUpdating(false);
+    }
+  }
+
   async function runMatchAction(matchId: number, action: string, successText: string) {
     setMessage("");
 
@@ -322,6 +368,7 @@ export default function AdminVacancyDetailPage({
 
   const canModeratePhotos = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
   const canModerateMatches = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
+  const canModerateVacancyStatus = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
 
   return (
     <main className="px-4 py-6 space-y-6">
@@ -349,6 +396,39 @@ export default function AdminVacancyDetailPage({
           <div>Статус вакансии: {statusLabel(shortlist.status)}</div>
           <div>Всего откликов: {funnel.total_matches}</div>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div>
+          <h2 className="text-xl font-semibold">Статус вакансии</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Текущий статус: {statusLabel(shortlist.status)}
+          </p>
+        </div>
+
+        {!canModerateVacancyStatus ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Вы можете просматривать статус вакансии. Изменение доступно только admin и moderator.
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {VACANCY_STATUS_ACTIONS.map((item) => {
+              const isCurrentStatus = shortlist.status === item.status;
+
+              return (
+                <button
+                  key={item.status}
+                  type="button"
+                  onClick={() => updateVacancyStatus(item.status)}
+                  disabled={vacancyStatusUpdating || isCurrentStatus}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isCurrentStatus ? `${item.label} · сейчас` : item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
