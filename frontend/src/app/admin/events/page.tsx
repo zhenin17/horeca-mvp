@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { apiFetch } from "@/lib/api";
 import {
   eventSourceLabel,
   eventTypeLabel,
@@ -32,15 +33,7 @@ export default function AdminEventsPage() {
       try {
         setErrorText("");
 
-        const response = await fetch("/api/funnel-events/", {
-          cache: "no-store",
-        });
-
-        if (!response.ok) {
-          throw new Error(`Не удалось загрузить события (${response.status})`);
-        }
-
-        const data = (await response.json()) as FunnelEventItem[];
+        const data = await apiFetch<FunnelEventItem[]>("/me/staff/events");
         setEvents(data);
       } catch (error) {
         console.error(error);
