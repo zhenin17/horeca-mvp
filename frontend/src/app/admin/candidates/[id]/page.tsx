@@ -87,6 +87,69 @@ type CandidateAvailabilityItem = {
   is_active?: boolean;
 };
 
+type MatchAction = {
+  action: string;
+  label: string;
+  successText: string;
+};
+
+function getAllowedActions(status: string): MatchAction[] {
+  const transitions: Record<string, MatchAction[]> = {
+    shortlist: [
+      { action: "send", label: "Отправить", successText: "Кандидат отправлен работодателю" },
+      { action: "view", label: "Просмотрен", successText: "Работодатель просмотрел кандидата" },
+      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    sent: [
+      { action: "view", label: "Просмотрен", successText: "Работодатель просмотрел кандидата" },
+      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    viewed: [
+      { action: "invite", label: "Пригласить", successText: "Кандидат приглашен" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    invited: [
+      { action: "interview", label: "Собеседование", successText: "Собеседование отмечено" },
+      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
+    ],
+    interviewed: [
+      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
+    ],
+    offered: [
+      { action: "hire", label: "Нанять", successText: "Кандидат отмечен как нанятый" },
+      { action: "reject", label: "Отклонить", successText: "Кандидат отклонен" },
+    ],
+    rejected: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    no_show: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    hired: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    worked: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    cancelled: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    confirmed: [
+      { action: "worked", label: "Отработал", successText: "Смена отмечена как отработанная" },
+      { action: "cancel", label: "Отмена", successText: "Смена отменена" },
+      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
+    ],
+  };
+
+  return transitions[status] || [];
+}
+
 function getReliabilityScore(reliability: CandidateReliability | null): number {
   if (!reliability) {
     return 0;
@@ -239,15 +302,15 @@ export default function AdminCandidateDetailPage({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/matches/${matchId}/${action}`, {
+      const response = await fetch(`/api/me/staff/matches/${matchId}/${action}`, {
         method: "POST",
         headers: getAuthHeaders(),
       });
 
-      const data = (await response.json()) as { detail?: string };
+      const data = (await response.json().catch(() => null)) as { detail?: string } | null;
 
       if (!response.ok) {
-        throw new Error(data.detail || "Не удалось изменить статус");
+        throw new Error(data?.detail || "Не удалось изменить статус");
       }
 
       setMessage(successText);
@@ -271,6 +334,7 @@ export default function AdminCandidateDetailPage({
 
   const reliabilityScore = getReliabilityScore(reliability);
   const canModeratePhotos = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
+  const canModerateMatches = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
 
   return (
     <main className="px-4 py-6 space-y-6">
@@ -514,101 +578,80 @@ export default function AdminCandidateDetailPage({
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="text-xl font-semibold">Отклики и статусы</h2>
 
+        {!canModerateMatches ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Вы можете просматривать отклики и статусы. Изменение статусов доступно только admin и moderator.
+          </div>
+        ) : null}
+
         {dashboard.items.length === 0 ? (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
             У кандидата пока нет откликов.
           </div>
         ) : (
           <div className="mt-4 space-y-4">
-            {dashboard.items.map((item) => (
-              <div
-                key={item.match_id}
-                className="rounded-xl border border-slate-200 p-4 space-y-4"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="font-medium">
-                      {item.role} · {item.venue_name}
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      {item.city}
-                      {item.district ? `, ${item.district}` : ""}
-                    </div>
-                    <div className="mt-1 text-sm text-slate-500">
-                      Статус отклика: {statusLabel(item.status)}
-                    </div>
-                    {item.comment ? (
-                      <div className="mt-1 text-sm text-slate-500">
-                        Комментарий: {item.comment}
+            {dashboard.items.map((item) => {
+              const allowedActions = getAllowedActions(item.status);
+
+              return (
+                <div
+                  key={item.match_id}
+                  className="rounded-xl border border-slate-200 p-4 space-y-4"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="font-medium">
+                        {item.role} · {item.venue_name}
                       </div>
-                    ) : null}
+                      <div className="text-sm text-slate-600">
+                        {item.city}
+                        {item.district ? `, ${item.district}` : ""}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-500">
+                        Статус отклика: {statusLabel(item.status)}
+                      </div>
+                      {item.comment ? (
+                        <div className="mt-1 text-sm text-slate-500">
+                          Комментарий: {item.comment}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+                      score {item.match_score ?? "-"}
+                    </div>
                   </div>
 
-                  <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
-                    score {item.match_score ?? "-"}
-                  </div>
+                  {!canModerateMatches ? (
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                      Только просмотр
+                    </div>
+                  ) : allowedActions.length === 0 ? (
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                      Для текущего статуса больше нет доступных действий.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {allowedActions.map((action) => (
+                        <button
+                          key={action.action}
+                          onClick={() =>
+                            runMatchAction(
+                              item.match_id,
+                              action.action,
+                              action.successText
+                            )
+                          }
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "send", "Кандидат отправлен работодателю")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Отправить
-                  </button>
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "view", "Работодатель просмотрел кандидата")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Просмотрен
-                  </button>
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "invite", "Кандидат приглашен")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Пригласить
-                  </button>
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "interview", "Собеседование отмечено")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Собеседование
-                  </button>
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "hire", "Кандидат отмечен как нанятый")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Нанять
-                  </button>
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "reject", "Кандидат отклонен")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Отклонить
-                  </button>
-                  <button
-                    onClick={() =>
-                      runMatchAction(item.match_id, "no-show", "Отмечен невыход")
-                    }
-                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"
-                  >
-                    Не дошел
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

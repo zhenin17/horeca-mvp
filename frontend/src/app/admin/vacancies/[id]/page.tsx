@@ -126,6 +126,17 @@ function getAllowedActions(status: string): MatchAction[] {
     hired: [
       { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
     ],
+    worked: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    cancelled: [
+      { action: "reopen", label: "Вернуть в работу", successText: "Отклик возвращен в работу" },
+    ],
+    confirmed: [
+      { action: "worked", label: "Отработал", successText: "Смена отмечена как отработанная" },
+      { action: "cancel", label: "Отмена", successText: "Смена отменена" },
+      { action: "no-show", label: "Не дошел", successText: "Отмечен невыход" },
+    ],
   };
 
   return transitions[status] || [];
@@ -279,15 +290,15 @@ export default function AdminVacancyDetailPage({
     setMessage("");
 
     try {
-      const response = await fetch(`/api/matches/${matchId}/${action}`, {
+      const response = await fetch(`/api/me/staff/matches/${matchId}/${action}`, {
         method: "POST",
         headers: getAuthHeaders(),
       });
 
-      const data = (await response.json()) as { detail?: string };
+      const data = (await response.json().catch(() => null)) as { detail?: string } | null;
 
       if (!response.ok) {
-        throw new Error(data.detail || "Не удалось изменить статус");
+        throw new Error(data?.detail || "Не удалось изменить статус");
       }
 
       setMessage(successText);
@@ -310,6 +321,7 @@ export default function AdminVacancyDetailPage({
   }
 
   const canModeratePhotos = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
+  const canModerateMatches = Boolean(currentUser?.is_admin || currentUser?.is_moderator);
 
   return (
     <main className="px-4 py-6 space-y-6">
@@ -433,6 +445,12 @@ export default function AdminVacancyDetailPage({
       <section className="rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h2 className="text-xl font-semibold">Shortlist</h2>
 
+        {!canModerateMatches ? (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            Вы можете просматривать отклики и статусы. Изменение статусов доступно только admin и moderator.
+          </div>
+        ) : null}
+
         {shortlist.matches.length === 0 ? (
           <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
             Пока в shortlist нет кандидатов.
@@ -489,7 +507,11 @@ export default function AdminVacancyDetailPage({
                     </div>
                   </div>
 
-                  {allowedActions.length === 0 ? (
+                  {!canModerateMatches ? (
+                    <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+                      Только просмотр
+                    </div>
+                  ) : allowedActions.length === 0 ? (
                     <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
                       Для текущего статуса больше нет доступных действий.
                     </div>
