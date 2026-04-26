@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.vacancy_candidate_matches import (
@@ -365,6 +365,27 @@ def delete_staff_vacancy_photo(
     db.commit()
 
     return {"status": "ok"}
+
+
+@router.patch("/vacancies/{vacancy_id}/status", response_model=VacancyRead)
+def update_staff_vacancy_status(
+    vacancy_id: int,
+    status_value: str = Body(..., embed=True, alias="status"),
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    allowed_statuses = {"new", "in_progress", "closed", "archived"}
+
+    if status_value not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="Invalid vacancy status")
+
+    vacancy = get_vacancy_or_404(vacancy_id, db)
+    vacancy.status = status_value
+
+    db.commit()
+    db.refresh(vacancy)
+
+    return get_vacancy_or_404(vacancy_id, db)
 
 
 @router.get("/matches", response_model=list[VacancyCandidateMatchWithCandidateRead])
