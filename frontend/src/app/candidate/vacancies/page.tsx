@@ -716,6 +716,7 @@ export default function CandidateVacanciesPage() {
       ]);
 
       const vacanciesData = normalizeArrayResponse<unknown>(vacanciesRaw, [
+        "suggested_vacancies",
         "items",
         "vacancies",
         "results",
