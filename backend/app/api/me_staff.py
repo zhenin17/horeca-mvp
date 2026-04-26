@@ -3,6 +3,13 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.vacancy_candidate_matches import (
+    can_transition_to,
+    create_shift_event_if_needed,
+    create_status_event,
+    get_match_or_404,
+    is_shift_match,
+)
 from app.core.db import get_db
 from app.dependencies.auth import require_admin_or_moderator, require_staff
 from app.models.candidate import Candidate
@@ -21,7 +28,10 @@ from app.schemas.candidate_dashboard import CandidateDashboardRead
 from app.schemas.funnel_event import FunnelEventRead
 from app.schemas.reliability import CandidateReliabilityRead
 from app.schemas.vacancy import VacancyPhotoRead, VacancyRead
-from app.schemas.vacancy_candidate_match import VacancyCandidateMatchWithCandidateRead
+from app.schemas.vacancy_candidate_match import (
+    VacancyCandidateMatchRead,
+    VacancyCandidateMatchWithCandidateRead,
+)
 from app.services.auth import CurrentUserContext
 from app.services.reliability import calculate_candidate_reliability
 
@@ -68,6 +78,36 @@ def delete_upload_file_if_local(photo_url: str) -> None:
 
     if file_path.exists() and file_path.is_file():
         file_path.unlink()
+
+
+def apply_staff_status_transition(
+    match_id: int,
+    new_status: str,
+    db: Session,
+) -> VacancyCandidateMatch:
+    match = get_match_or_404(match_id, db)
+
+    old_status = match.status
+    shift_match = is_shift_match(db, match)
+
+    if not can_transition_to(old_status, new_status, is_shift=shift_match):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition: {old_status} -> {new_status}",
+        )
+
+    match.status = new_status
+    db.commit()
+    db.refresh(match)
+
+    create_status_event(db, match, old_status, new_status)
+
+    if shift_match:
+        create_shift_event_if_needed(db, match, new_status)
+
+    db.commit()
+
+    return match
 
 
 @router.get("/candidates", response_model=list[CandidateRead])
@@ -353,6 +393,122 @@ def list_staff_matches(
         query = query.filter(VacancyCandidateMatch.status == status)
 
     return query.order_by(VacancyCandidateMatch.id.desc()).all()
+
+
+@router.post("/matches/{match_id}/send", response_model=VacancyCandidateMatchRead)
+def staff_send_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "sent", db)
+
+
+@router.post("/matches/{match_id}/view", response_model=VacancyCandidateMatchRead)
+def staff_view_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "viewed", db)
+
+
+@router.post("/matches/{match_id}/invite", response_model=VacancyCandidateMatchRead)
+def staff_invite_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "invited", db)
+
+
+@router.post("/matches/{match_id}/confirm", response_model=VacancyCandidateMatchRead)
+def staff_confirm_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "confirmed", db)
+
+
+@router.post("/matches/{match_id}/worked", response_model=VacancyCandidateMatchRead)
+def staff_worked_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "worked", db)
+
+
+@router.post("/matches/{match_id}/cancel", response_model=VacancyCandidateMatchRead)
+def staff_cancel_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "cancelled", db)
+
+
+@router.post("/matches/{match_id}/interview", response_model=VacancyCandidateMatchRead)
+def staff_interview_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "interviewed", db)
+
+
+@router.post("/matches/{match_id}/hire", response_model=VacancyCandidateMatchRead)
+def staff_hire_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "hired", db)
+
+
+@router.post("/matches/{match_id}/reject", response_model=VacancyCandidateMatchRead)
+def staff_reject_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "rejected", db)
+
+
+@router.post("/matches/{match_id}/no-show", response_model=VacancyCandidateMatchRead)
+def staff_no_show_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    return apply_staff_status_transition(match_id, "no_show", db)
+
+
+@router.post("/matches/{match_id}/reopen", response_model=VacancyCandidateMatchRead)
+def staff_reopen_match(
+    match_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    match = get_match_or_404(match_id, db)
+
+    old_status = match.status
+
+    if old_status not in {"rejected", "no_show", "hired", "worked", "cancelled"}:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition: {old_status} -> shortlist",
+        )
+
+    match.status = "shortlist"
+    db.commit()
+    db.refresh(match)
+
+    create_status_event(db, match, old_status, "shortlist")
+    db.commit()
+
+    return match
 
 
 @router.get("/events", response_model=list[FunnelEventRead])
