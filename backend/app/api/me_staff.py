@@ -1,8 +1,10 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.db import get_db
-from app.dependencies.auth import require_staff
+from app.dependencies.auth import require_admin_or_moderator, require_staff
 from app.models.candidate import Candidate
 from app.models.candidate_availability import CandidateAvailability
 from app.models.candidate_photo import CandidatePhoto
@@ -24,6 +26,9 @@ from app.services.auth import CurrentUserContext
 from app.services.reliability import calculate_candidate_reliability
 
 router = APIRouter(prefix="/me/staff", tags=["Me Staff"])
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+UPLOADS_DIR = BASE_DIR / "uploads"
 
 
 def get_candidate_or_404(candidate_id: int, db: Session) -> Candidate:
@@ -52,6 +57,17 @@ def get_vacancy_or_404(vacancy_id: int, db: Session) -> Vacancy:
         raise HTTPException(status_code=404, detail="Vacancy not found")
 
     return vacancy
+
+
+def delete_upload_file_if_local(photo_url: str) -> None:
+    if not photo_url.startswith("/uploads/"):
+        return
+
+    relative_path = photo_url.removeprefix("/uploads/")
+    file_path = UPLOADS_DIR / relative_path
+
+    if file_path.exists() and file_path.is_file():
+        file_path.unlink()
 
 
 @router.get("/candidates", response_model=list[CandidateRead])
@@ -94,6 +110,33 @@ def list_staff_candidate_photos(
         )
         .all()
     )
+
+
+@router.delete("/candidates/{candidate_id}/photos/{photo_id}")
+def delete_staff_candidate_photo(
+    candidate_id: int,
+    photo_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    get_candidate_or_404(candidate_id, db)
+
+    photo = (
+        db.query(CandidatePhoto)
+        .filter(CandidatePhoto.id == photo_id)
+        .filter(CandidatePhoto.candidate_id == candidate_id)
+        .first()
+    )
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    delete_upload_file_if_local(photo.photo_url)
+
+    db.delete(photo)
+    db.commit()
+
+    return {"status": "ok"}
 
 
 @router.get(
@@ -255,6 +298,33 @@ def list_staff_vacancy_photos(
         )
         .all()
     )
+
+
+@router.delete("/vacancies/{vacancy_id}/photos/{photo_id}")
+def delete_staff_vacancy_photo(
+    vacancy_id: int,
+    photo_id: int,
+    current_user: CurrentUserContext = Depends(require_admin_or_moderator),
+    db: Session = Depends(get_db),
+):
+    get_vacancy_or_404(vacancy_id, db)
+
+    photo = (
+        db.query(VacancyPhoto)
+        .filter(VacancyPhoto.id == photo_id)
+        .filter(VacancyPhoto.vacancy_id == vacancy_id)
+        .first()
+    )
+
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    delete_upload_file_if_local(photo.photo_url)
+
+    db.delete(photo)
+    db.commit()
+
+    return {"status": "ok"}
 
 
 @router.get("/matches", response_model=list[VacancyCandidateMatchWithCandidateRead])
