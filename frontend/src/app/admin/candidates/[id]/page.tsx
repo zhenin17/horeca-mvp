@@ -206,7 +206,7 @@ export default function AdminCandidateDetailPage({
     setPhotoDeletingId(photoId);
 
     try {
-      const response = await fetch(`/api/candidates/${id}/photos/${photoId}`, {
+      const response = await fetch(`/api/me/staff/candidates/${id}/photos/${photoId}`, {
         method: "DELETE",
         headers: getAuthHeaders(),
       });
